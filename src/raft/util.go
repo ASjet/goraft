@@ -33,7 +33,7 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 }
 
 var (
-	defaultLogger = NewLogger(LevelDebug)
+	defaultLogger = NewLogger(LevelInfo)
 )
 
 func Trace(msg string, args ...interface{}) {

@@ -56,17 +56,17 @@ type Raft struct {
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
-
+	stateMu sync.Mutex
+	state   State
 }
 
 // return currentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
-
-	var term int
-	var isleader bool
 	// Your code here (2A).
-	return term, isleader
+	rf.stateMu.Lock()
+	defer rf.stateMu.Unlock()
+	return rf.state.Term(), rf.state.Role() == RoleLeader
 }
 
 // save Raft's persistent state to stable storage,
@@ -121,21 +121,49 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 
 }
 
-// example RequestVote RPC arguments structure.
-// field names must start with capital letters!
-type RequestVoteArgs struct {
-	// Your data here (2A, 2B).
-}
-
-// example RequestVote RPC reply structure.
-// field names must start with capital letters!
-type RequestVoteReply struct {
-	// Your data here (2A).
-}
-
 // example RequestVote RPC handler.
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+	rf.stateMu.Lock()
+	defer rf.stateMu.Unlock()
+
+	reply.Term = rf.state.Term()
+
+	switch {
+	case args.Term < reply.Term:
+		reply.Granted = false
+	case args.Term == reply.Term:
+		reply.Granted = rf.state.RequestVote(args.Term, args.Candidate)
+	case args.Term > reply.Term:
+		if rf.state.Close() {
+			Info("%s receive higher term %d (current %d) from %d, migrate to follower",
+				rf.state, args.Term, reply.Term, args.Candidate)
+			rf.state.MigrateTo(Follower(args.Term, args.Candidate, rf.state))
+		}
+		reply.Granted = true
+	}
+}
+
+func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	rf.stateMu.Lock()
+	defer rf.stateMu.Unlock()
+
+	reply.Term = rf.state.Term()
+
+	if args.Term < reply.Term {
+		reply.Success = false
+		return
+	}
+
+	if args.Term > reply.Term {
+		if rf.state.Close() {
+			Info("%s receive higher term %d (current %d) from %d, migrate to follower",
+				rf.state, args.Term, reply.Term, args.Leader)
+			rf.state.MigrateTo(Follower(args.Term, args.Leader, rf.state))
+		}
+	}
+
+	reply.Success = rf.state.AppendEntries(args.Term, args.Leader)
 }
 
 // example code to send a RequestVote RPC to a server.
@@ -204,6 +232,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 func (rf *Raft) Kill() {
 	rf.dead.Store(true)
 	// Your code here, if desired.
+	rf.state.Close()
 }
 
 func (rf *Raft) killed() bool {
@@ -213,11 +242,13 @@ func (rf *Raft) killed() bool {
 // The ticker go routine starts a new election if this peer hasn't received
 // heartsbeats recently.
 func (rf *Raft) ticker() {
-	for rf.killed() == false {
+	for !rf.killed() {
 
 		// Your code here to check if a leader election should
 		// be started and to randomize sleeping time using
 		// time.Sleep().
+
+		// This will do nothing
 
 	}
 }
@@ -242,6 +273,10 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
+
+	rf.state = Follower(0, NoVote, Base(me, peers, func(state State) {
+		rf.state = state
+	}))
 
 	// start ticker goroutine to start elections
 	go rf.ticker()
