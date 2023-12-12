@@ -1,13 +1,111 @@
 package raft
 
-import "log"
+import (
+	llog "log"
+
+	"github.com/sirupsen/logrus"
+)
 
 // Debugging
-const Debug = false
+const debug = false
+
+type LogLevel int
+
+const (
+	LevelTrace LogLevel = iota
+	LevelDebug
+	LevelInfo
+	LevelWarn
+	LevelError
+	LevelFatal
+)
+
+func init() {
+	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetFormatter(logrus.StandardLogger().Formatter)
+}
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
-	if Debug {
-		log.Printf(format, a...)
+	if debug {
+		llog.Printf(format, a...)
 	}
 	return
+}
+
+var (
+	defaultLogger = NewLogger(LevelDebug)
+)
+
+func Trace(msg string, args ...interface{}) {
+	defaultLogger.Trace(msg, args...)
+	// logrus.Tracef(msg, args...)
+}
+
+func Debug(msg string, args ...interface{}) {
+	defaultLogger.Debug(msg, args...)
+	// logrus.Debugf(msg, args...)
+}
+
+func Info(msg string, args ...interface{}) {
+	defaultLogger.Info(msg, args...)
+	// logrus.Infof(msg, args...)
+}
+
+func Warn(msg string, args ...interface{}) {
+	defaultLogger.Warn(msg, args...)
+	// logrus.Warnf(msg, args...)
+}
+
+func Error(msg string, args ...interface{}) {
+	defaultLogger.Error(msg, args...)
+	// logrus.Errorf(msg, args...)
+}
+
+func Fatal(msg string, args ...interface{}) {
+	defaultLogger.Fatal(msg, args...)
+	// logrus.Fatalf(msg, args...)
+}
+
+type Logger struct {
+	level LogLevel
+}
+
+func NewLogger(level LogLevel) *Logger {
+	return &Logger{level: level}
+}
+
+func (l *Logger) Trace(msg string, args ...interface{}) {
+	if l.level <= LevelTrace {
+		llog.Printf("[TRAC]"+msg, args...)
+	}
+}
+
+func (l *Logger) Debug(msg string, args ...interface{}) {
+	if l.level <= LevelDebug {
+		llog.Printf("[DEBG]"+msg, args...)
+	}
+}
+
+func (l *Logger) Info(msg string, args ...interface{}) {
+	if l.level <= LevelInfo {
+		llog.Printf("[INFO]"+msg, args...)
+	}
+}
+
+func (l *Logger) Warn(msg string, args ...interface{}) {
+	if l.level <= LevelWarn {
+		llog.Printf("[WARN]"+msg, args...)
+	}
+}
+
+func (l *Logger) Error(msg string, args ...interface{}) {
+	if l.level <= LevelError {
+		llog.Printf("[EROR]"+msg, args...)
+	}
+}
+
+func (l *Logger) Fatal(msg string, args ...interface{}) {
+	if l.level <= LevelFatal {
+		llog.Fatalf("[FATL]"+msg, args...)
+	}
 }
