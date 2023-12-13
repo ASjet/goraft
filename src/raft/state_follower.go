@@ -23,8 +23,7 @@ func Follower(term, follow int, oldState State) *FollowerState {
 	fs := &FollowerState{
 		BaseState: oldState.Base(),
 	}
-	fs.term = term
-	fs.follow = follow
+	fs.Follow(term, follow)
 	Info("%s new follower", fs)
 
 	fs.timer = util.NewTimer(context.TODO(), heartbeatTimeout, fs.heartbeatTimeout).Start()
@@ -32,10 +31,9 @@ func Follower(term, follow int, oldState State) *FollowerState {
 }
 
 func (s *FollowerState) RequestVote(term, candidate int) (granted bool) {
-	if s.follow == NoVote {
+	if s.Voted() == NoVote {
 		Info("%s start following %d at term %d", s, candidate, term)
-		s.term = term
-		s.follow = candidate
+		s.Follow(term, candidate)
 		return true
 	}
 	// TODO: valid log entries
@@ -43,7 +41,7 @@ func (s *FollowerState) RequestVote(term, candidate int) (granted bool) {
 }
 
 func (s *FollowerState) AppendEntries(term, leader int) (success bool) {
-	if s.follow != NoVote && s.follow != leader {
+	if voted := s.Voted(); voted != NoVote && voted != leader {
 		return false
 	}
 	Debug("%s receive heartbeat from %d", s, leader)
@@ -53,7 +51,7 @@ func (s *FollowerState) AppendEntries(term, leader int) (success bool) {
 }
 
 func (s *FollowerState) Close() bool {
-	if isFirst := s.closed.CompareAndSwap(false, true); !isFirst {
+	if !s.closed.CompareAndSwap(false, true) {
 		return false
 	}
 	s.timer.Stop()
@@ -61,7 +59,7 @@ func (s *FollowerState) Close() bool {
 }
 
 func (s *FollowerState) String() string {
-	return fmt.Sprintf("%s%d:%03d", s.Role(), s.self, s.term)
+	return fmt.Sprintf("%s%d:%03d", s.Role(), s.Me(), s.Term())
 }
 
 func (s *FollowerState) Role() string {
@@ -71,6 +69,6 @@ func (s *FollowerState) Role() string {
 func (s *FollowerState) heartbeatTimeout() {
 	if s.closed.CompareAndSwap(false, true) {
 		Info("%s heartbeat timeout, migrate to candidate", s)
-		s.MigrateTo(Candidate(s.term+1, s))
+		s.MigrateTo(Candidate(s.Term()+1, s))
 	}
 }

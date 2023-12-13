@@ -18,7 +18,7 @@ var (
 
 type State interface {
 	MigrateTo(state State)
-	VoteFor() int
+	Voted() int
 	Term() int
 	Base() BaseState
 
@@ -27,7 +27,7 @@ type State interface {
 	AppendEntries(term, leader int) (success bool)
 	String() string
 	Role() string
-	Close() (firstClose bool)
+	Close() (success bool)
 }
 
 // Basic raft states
@@ -37,36 +37,60 @@ type BaseState struct {
 	follow int
 
 	// Immutable states
-	self    int
-	peers   []*labrpc.ClientEnd
-	migrate MigrateFunc
+	r *Raft
 }
 
-func Base(self int, peers []*labrpc.ClientEnd, migrateFn MigrateFunc) *BaseState {
+func Base(r *Raft) *BaseState {
 	return &BaseState{
 		term:   0,
 		follow: NoVote,
-
-		self:    self,
-		peers:   peers,
-		migrate: migrateFn,
+		r:      r,
 	}
 }
 
-func (s *BaseState) MigrateTo(state State) {
-	s.migrate(state)
-}
+// Getters
 
-func (s *BaseState) VoteFor() int {
-	return s.follow
+func (s *BaseState) Base() BaseState {
+	return *s
 }
 
 func (s *BaseState) Term() int {
 	return s.term
 }
 
-func (s *BaseState) Base() BaseState {
-	return *s
+func (s *BaseState) Voted() int {
+	return s.follow
+}
+
+func (s *BaseState) Me() int {
+	return s.r.me
+}
+
+func (s *BaseState) Peers() int {
+	return len(s.r.peers)
+}
+
+func (s *BaseState) Majority() int {
+	return s.Peers()/2 + 1
+}
+
+func (s *BaseState) PollPeers(f func(peerID int, peerRPC *labrpc.ClientEnd)) {
+	for i, peer := range s.r.peers {
+		if i != s.Me() {
+			go f(i, peer)
+		}
+	}
+}
+
+// Setters
+
+func (s *BaseState) Follow(term, peer int) {
+	s.follow = peer
+	s.term = term
+}
+
+func (s *BaseState) MigrateTo(state State) {
+	s.r.state = state
 }
 
 func (s *BaseState) RequestVote(term, candidate int) (granted bool) {

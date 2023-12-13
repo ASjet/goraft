@@ -131,8 +131,11 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	switch {
 	case args.Term < reply.Term:
+		// Reply false if term < currentTerm (§5.1)
 		reply.Granted = false
-	case args.Term == reply.Term:
+	case args.Term == reply.Term: // The callee is a candidate or already voted for other candidate
+		// If votedFor is null or candidateId, and candidate’s log is at
+		// least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
 		reply.Granted = rf.state.RequestVote(args.Term, args.Candidate)
 	case args.Term > reply.Term:
 		if rf.state.Close() {
@@ -274,9 +277,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
-	rf.state = Follower(0, NoVote, Base(me, peers, func(state State) {
-		rf.state = state
-	}))
+	rf.state = Follower(0, NoVote, Base(rf))
 
 	// start ticker goroutine to start elections
 	go rf.ticker()

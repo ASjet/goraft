@@ -45,7 +45,7 @@ func (s *LeaderState) AppendEntries(term, leader int) (success bool) {
 }
 
 func (s *LeaderState) Close() bool {
-	if isFirst := s.closed.CompareAndSwap(false, true); !isFirst {
+	if !s.closed.CompareAndSwap(false, true) {
 		return false
 	}
 	s.wg.Wait()
@@ -53,7 +53,7 @@ func (s *LeaderState) Close() bool {
 }
 
 func (s *LeaderState) String() string {
-	return fmt.Sprintf("%s%d:%03d", s.Role(), s.self, s.term)
+	return fmt.Sprintf("%s%d:%03d", s.Role(), s.Me(), s.Term())
 }
 
 func (s *LeaderState) Role() string {
@@ -62,24 +62,25 @@ func (s *LeaderState) Role() string {
 
 func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
 	args := &AppendEntriesArgs{
-		Term:   s.term,
-		Leader: s.self,
+		Term:   s.Term(),
+		Leader: s.Me(),
 	}
 	reply := new(AppendEntriesReply)
 	Debug("%s calling peers[%d].AppendEntries(%d, %d)", s, peerID,
 		args.Term, args.Leader)
-	if !peerRPC.Call("Raft.AppendEntries", args, reply) {
-		Error("%s peers[%d].AppendEntries(%d, %d) failed", s, peerID,
-			args.Term, args.Leader)
+	if !peerRPC.Call("Raft.AppendEntries", args, reply) || s.closed.Load() {
+		if !s.closed.Load() {
+			Error("%s peers[%d].AppendEntries(%d, %d) failed", s, peerID,
+				args.Term, args.Leader)
+		}
+		return
 	}
 	Debug("%s peers[%d].AppendEntries(%d, %d) => (%d, %v)", s, peerID,
 		args.Term, args.Leader, reply.Term, reply.Success)
 
-	if reply.Success {
-		return
-	} else {
-		if reply.Term > s.term && s.Close() {
-			Info("%s got higher term %d (current %d), migrate to follower", s, reply.Term, s.term)
+	if !reply.Success {
+		if curTerm := s.Term(); reply.Term > curTerm && s.Close() {
+			Info("%s got higher term %d (current %d), migrate to follower", s, reply.Term, curTerm)
 			s.MigrateTo(Follower(reply.Term, NoVote, s))
 		}
 	}
@@ -91,12 +92,7 @@ func (s *LeaderState) sendHeartbeats() {
 
 	for !s.closed.Load() {
 		Info("%s sending heartbeats", s)
-		for peerID, peerRPC := range s.peers {
-			if peerID == s.self {
-				continue
-			}
-			go s.sendHeartbeat(peerID, peerRPC)
-		}
+		s.PollPeers(s.sendHeartbeat)
 		// We won't wait all peers to respond here
 
 		if s.closed.Load() {
