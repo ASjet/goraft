@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestTimer(t *testing.T) {
+func TestTimerFire(t *testing.T) {
 	dura := func() time.Duration {
 		return time.Millisecond * 20
 	}
@@ -39,5 +39,38 @@ func TestTimer(t *testing.T) {
 	time.Sleep(time.Millisecond * 20)
 	if !timer.Fired() {
 		t.FailNow()
+	}
+}
+
+func TestTimerStop(t *testing.T) {
+	dura := func() time.Duration {
+		return time.Millisecond * 20
+	}
+
+	fireCh := make(chan struct{}, 1)
+	onFire := func() {
+		fireCh <- struct{}{}
+	}
+
+	timer := NewTimer(context.TODO(), dura, onFire)
+
+	timer.Start()
+	if timer.Fired() {
+		t.FailNow()
+	}
+
+	timer.Stop()
+	if timer.Fired() {
+		t.FailNow()
+	}
+
+	// Multiple stop won't block
+	deadline := time.AfterFunc(time.Second, t.FailNow)
+	timer.Stop()
+	if !deadline.Stop() {
+		select {
+		case <-deadline.C:
+		default:
+		}
 	}
 }
