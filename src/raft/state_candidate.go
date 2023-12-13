@@ -25,10 +25,10 @@ type CandidateState struct {
 	votes   map[int]bool
 }
 
-func Candidate(term int, oldState State) *CandidateState {
+func Candidate(term int, from State) *CandidateState {
 	// Candidate can come from any state
 	cs := &CandidateState{
-		BaseState: oldState.Base(),
+		BaseState: from.Base(),
 	}
 	// A candidate always vote for itself
 	cs.Follow(term, cs.Me())
@@ -70,7 +70,7 @@ func (s *CandidateState) Role() string {
 func (s *CandidateState) electionTimeout() {
 	if s.closed.CompareAndSwap(false, true) {
 		Info("%s election timeout, start another election", s)
-		s.MigrateTo(Candidate(s.Term()+1, s))
+		s.To(Candidate(s.Term()+1, s))
 	}
 }
 
@@ -103,12 +103,12 @@ func (s *CandidateState) requestVote(peerID int, peerRPC *labrpc.ClientEnd) {
 		if votes >= s.Majority() && s.Close() {
 			// Got majority votes, become leader
 			Info("%s got majority votes(%d/%d), migrate to leader", s, votes, s.Peers())
-			s.MigrateTo(Leader(s))
+			s.To(Leader(s))
 		}
 	} else {
 		if curTerm := s.Term(); reply.Term > curTerm && s.Close() {
 			Info("%s got higher term %d (current %d), migrate to follower", s, reply.Term, curTerm)
-			s.MigrateTo(Follower(reply.Term, NoVote, s))
+			s.To(Follower(reply.Term, NoVote, s))
 		}
 	}
 }

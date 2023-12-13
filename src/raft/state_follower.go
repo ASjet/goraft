@@ -18,10 +18,10 @@ type FollowerState struct {
 	closed atomic.Bool
 }
 
-func Follower(term, follow int, oldState State) *FollowerState {
+func Follower(term, follow int, from State) *FollowerState {
 	// Follower can come from any state
 	fs := &FollowerState{
-		BaseState: oldState.Base(),
+		BaseState: from.Base(),
 	}
 	fs.Follow(term, follow)
 	Info("%s new follower", fs)
@@ -31,12 +31,14 @@ func Follower(term, follow int, oldState State) *FollowerState {
 }
 
 func (s *FollowerState) RequestVote(term, candidate int) (granted bool) {
-	if s.Voted() == NoVote {
-		Info("%s start following %d at term %d", s, candidate, term)
-		s.Follow(term, candidate)
+	if s.Voted() == NoVote || s.Voted() == candidate {
+		if s.Follow(term, candidate) {
+			Info("%s start following %d at term %d", s, candidate, term)
+		}
+		// TODO: valid log entries
+		s.timer.Restart()
 		return true
 	}
-	// TODO: valid log entries
 	return false
 }
 
@@ -69,6 +71,6 @@ func (s *FollowerState) Role() string {
 func (s *FollowerState) heartbeatTimeout() {
 	if s.closed.CompareAndSwap(false, true) {
 		Info("%s heartbeat timeout, migrate to candidate", s)
-		s.MigrateTo(Candidate(s.Term()+1, s))
+		s.To(Candidate(s.Term()+1, s))
 	}
 }

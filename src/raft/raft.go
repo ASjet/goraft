@@ -138,10 +138,13 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		// least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
 		reply.Granted = rf.state.RequestVote(args.Term, args.Candidate)
 	case args.Term > reply.Term:
+		// TODO: valid log entries here first
+
+		// We got a higher term with valid log entries, migrate to follower
 		if rf.state.Close() {
 			Info("%s receive higher term %d (current %d) from %d, migrate to follower",
 				rf.state, args.Term, reply.Term, args.Candidate)
-			rf.state.MigrateTo(Follower(args.Term, args.Candidate, rf.state))
+			rf.state.To(Follower(args.Term, args.Candidate, rf.state))
 		}
 		reply.Granted = true
 	}
@@ -162,7 +165,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		if rf.state.Close() {
 			Info("%s receive higher term %d (current %d) from %d, migrate to follower",
 				rf.state, args.Term, reply.Term, args.Leader)
-			rf.state.MigrateTo(Follower(args.Term, args.Leader, rf.state))
+			rf.state.To(Follower(args.Term, args.Leader, rf.state))
 		}
 	}
 

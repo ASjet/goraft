@@ -19,15 +19,15 @@ type LeaderState struct {
 	closed atomic.Bool
 }
 
-func Leader(oldState State) *LeaderState {
+func Leader(from State) *LeaderState {
 	// Leader can only come from candidate
-	if oldState.Role() != RoleCandidate {
-		Error("%s can not migrate to leader since it's not a candidate", oldState)
-		panic("invalid state transition")
+	if from.Role() != RoleCandidate {
+		Error("%s can not migrate to leader since it's not a candidate", from)
+		panic("invalid state transition: only candidate can migrate to leader")
 	}
 
 	ls := &LeaderState{
-		BaseState: oldState.Base(),
+		BaseState: from.Base(),
 	}
 	Info("%s new leader", ls)
 
@@ -81,7 +81,7 @@ func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
 	if !reply.Success {
 		if curTerm := s.Term(); reply.Term > curTerm && s.Close() {
 			Info("%s got higher term %d (current %d), migrate to follower", s, reply.Term, curTerm)
-			s.MigrateTo(Follower(reply.Term, NoVote, s))
+			s.To(Follower(reply.Term, NoVote, s))
 		}
 	}
 }

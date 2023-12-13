@@ -17,7 +17,7 @@ var (
 )
 
 type State interface {
-	MigrateTo(state State)
+	To(state State)
 	Voted() int
 	Term() int
 	Base() BaseState
@@ -84,12 +84,14 @@ func (s *BaseState) PollPeers(f func(peerID int, peerRPC *labrpc.ClientEnd)) {
 
 // Setters
 
-func (s *BaseState) Follow(term, peer int) {
+func (s *BaseState) Follow(term, peer int) (changed bool) {
+	changed = (s.follow != peer) || (s.term != term)
 	s.follow = peer
 	s.term = term
+	return changed
 }
 
-func (s *BaseState) MigrateTo(state State) {
+func (s *BaseState) To(state State) {
 	s.r.state = state
 }
 
