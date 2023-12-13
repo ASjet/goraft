@@ -22,7 +22,7 @@ type CandidateState struct {
 	timer  *util.Timer
 
 	votesMu sync.Mutex
-	votes   []int
+	votes   map[int]bool
 }
 
 func Candidate(term int, oldState State) *CandidateState {
@@ -32,8 +32,8 @@ func Candidate(term int, oldState State) *CandidateState {
 	}
 	// A candidate always vote for itself
 	cs.Follow(term, cs.Me())
-	cs.votes = make([]int, 1, cs.Peers())
-	cs.votes[0] = cs.Me()
+	cs.votes = make(map[int]bool, cs.Peers())
+	cs.votes[cs.Me()] = true
 	Info("%s new candidate", cs)
 
 	cs.timer = util.NewTimer(context.TODO(), electionTimeout, cs.electionTimeout).Start()
@@ -94,7 +94,7 @@ func (s *CandidateState) requestVote(peerID int, peerRPC *labrpc.ClientEnd) {
 
 	if reply.Granted {
 		s.votesMu.Lock()
-		s.votes = append(s.votes, peerID)
+		s.votes[peerID] = true
 		votes := len(s.votes)
 		s.votesMu.Unlock()
 
