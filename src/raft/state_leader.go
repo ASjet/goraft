@@ -53,7 +53,7 @@ func (s *LeaderState) Close() bool {
 }
 
 func (s *LeaderState) String() string {
-	return fmt.Sprintf("%s%d:%03d", s.Role(), s.Me(), s.Term())
+	return fmt.Sprintf("%d:%s%03d", s.Me(), s.Role(), s.Term())
 }
 
 func (s *LeaderState) Role() string {
