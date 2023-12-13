@@ -36,11 +36,11 @@ func Leader(from State) *LeaderState {
 	return ls
 }
 
-func (s *LeaderState) RequestVote(term, candidate int) (granted bool) {
+func (s *LeaderState) RequestVote(args *RequestVoteArgs) (granted bool) {
 	return false
 }
 
-func (s *LeaderState) AppendEntries(term, leader int) (success bool) {
+func (s *LeaderState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	return false
 }
 

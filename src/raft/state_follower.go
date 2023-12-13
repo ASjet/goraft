@@ -30,25 +30,45 @@ func Follower(term, follow int, from State) *FollowerState {
 	return fs
 }
 
-func (s *FollowerState) RequestVote(term, candidate int) (granted bool) {
-	if s.Voted() == NoVote || s.Voted() == candidate {
-		if s.Follow(term, candidate) {
-			Info("%s start following %d at term %d", s, candidate, term)
-		}
-		// TODO: valid log entries
-		s.timer.Restart()
-		return true
-	}
-	return false
-}
-
-func (s *FollowerState) AppendEntries(term, leader int) (success bool) {
-	if voted := s.Voted(); voted != NoVote && voted != leader {
+// If votedFor is null or candidateId, and candidate’s log is at
+// least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
+func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
+	if s.Voted() != NoVote && s.Voted() != args.Candidate {
 		return false
 	}
-	Debug("%s receive heartbeat from %d", s, leader)
+
+	if !s.ValidEntries() {
+		return false
+	}
+
+	if s.Follow(args.Term, args.Candidate) {
+		Info("%s start following %d at term %d", s, args.Candidate, args.Term)
+	}
 	s.timer.Restart()
-	// TODO: valid log entries
+	return true
+}
+
+func (s *FollowerState) AppendEntries(args *AppendEntriesArgs) (success bool) {
+	if s.Voted() != args.Leader {
+		return false
+	}
+
+	if !s.ValidEntries() {
+		return false
+	}
+
+	Debug("%s receive heartbeat from %d", s, args.Leader)
+	s.timer.Restart()
+
+	// If an existing entry conflicts with a new one (same index but different terms),
+	// delete the existing entry and all that follow it (§5.3)
+
+	// Append any new entries not already in the log
+
+	// If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
+
+	// TODO: handle log entries
+
 	return true
 }
 

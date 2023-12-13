@@ -133,12 +133,13 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	case args.Term < reply.Term:
 		// Reply false if term < currentTerm (§5.1)
 		reply.Granted = false
-	case args.Term == reply.Term: // The callee is a candidate or already voted for other candidate
-		// If votedFor is null or candidateId, and candidate’s log is at
-		// least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
-		reply.Granted = rf.state.RequestVote(args.Term, args.Candidate)
+	case args.Term == reply.Term:
+		reply.Granted = rf.state.RequestVote(args)
 	case args.Term > reply.Term:
-		// TODO: valid log entries here first
+		if !rf.state.ValidEntries() {
+			reply.Granted = false
+			return
+		}
 
 		// We got a higher term with valid log entries, migrate to follower
 		if rf.state.Close() {
@@ -156,20 +157,25 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	reply.Term = rf.state.Term()
 
-	if args.Term < reply.Term {
+	switch {
+	case args.Term < reply.Term:
+		// Reply false if term < currentTerm (§5.1)
 		reply.Success = false
-		return
-	}
+	case args.Term == reply.Term:
+		reply.Success = rf.state.AppendEntries(args)
+	case args.Term > reply.Term:
+		if !rf.state.ValidEntries() {
+			reply.Success = false
+			return
+		}
 
-	if args.Term > reply.Term {
 		if rf.state.Close() {
 			Info("%s receive higher term %d (current %d) from %d, migrate to follower",
 				rf.state, args.Term, reply.Term, args.Leader)
 			rf.state.To(Follower(args.Term, args.Leader, rf.state))
 		}
+		reply.Success = rf.state.AppendEntries(args)
 	}
-
-	reply.Success = rf.state.AppendEntries(args.Term, args.Leader)
 }
 
 // example code to send a RequestVote RPC to a server.

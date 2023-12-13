@@ -42,12 +42,12 @@ func Candidate(term int, from State) *CandidateState {
 	return cs
 }
 
-func (s *CandidateState) RequestVote(term, candidate int) (granted bool) {
+func (s *CandidateState) RequestVote(args *RequestVoteArgs) (granted bool) {
 	return false
 }
 
-func (s *CandidateState) AppendEntries(term, leader int) (success bool) {
-	return false
+func (s *CandidateState) AppendEntries(args *AppendEntriesArgs) (success bool) {
+	return s.ValidEntries()
 }
 
 func (s *CandidateState) Close() bool {

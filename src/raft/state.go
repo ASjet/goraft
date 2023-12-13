@@ -21,13 +21,18 @@ type State interface {
 	Voted() int
 	Term() int
 	Base() BaseState
-
-	// Call only term == curTerm
-	RequestVote(term, candidate int) (granted bool)
-	AppendEntries(term, leader int) (success bool)
 	String() string
 	Role() string
 	Close() (success bool)
+
+	// Call only term == curTerm
+	RequestVote(args *RequestVoteArgs) (granted bool)
+	// Call only term == curTerm
+	AppendEntries(args *AppendEntriesArgs) (success bool)
+
+	// Reply false if log doesn’t contain an entry at prevLogIndex
+	// whose term matches prevLogTerm (§5.3)
+	ValidEntries() bool
 }
 
 // Basic raft states
@@ -82,6 +87,11 @@ func (s *BaseState) PollPeers(f func(peerID int, peerRPC *labrpc.ClientEnd)) {
 	}
 }
 
+func (s *BaseState) ValidEntries() bool {
+	// TODO: valid log entries
+	return true
+}
+
 // Setters
 
 func (s *BaseState) Follow(term, peer int) (changed bool) {
@@ -95,11 +105,11 @@ func (s *BaseState) To(state State) {
 	s.r.state = state
 }
 
-func (s *BaseState) RequestVote(term, candidate int) (granted bool) {
+func (s *BaseState) RequestVote(args *RequestVoteArgs) (granted bool) {
 	panic("not implemented")
 }
 
-func (s *BaseState) AppendEntries(term, leader int) (success bool) {
+func (s *BaseState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	panic("not implemented")
 }
 
