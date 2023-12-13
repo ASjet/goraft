@@ -36,11 +36,11 @@ const (
 )
 
 func electionTimeout() time.Duration {
-	return ElectionTimeout + time.Duration(rand.Int63n(int64(ElectionTimeoutDelta)))
+	return ElectionTimeout - ElectionTimeoutDelta/2 + time.Duration(rand.Int63n(int64(ElectionTimeoutDelta)))
 }
 
 func heartbeatTimeout() time.Duration {
-	return ElectionTimeout + time.Duration(rand.Int63n(int64(ElectionTimeoutDelta)))
+	return ElectionTimeout - ElectionTimeoutDelta/2 + time.Duration(rand.Int63n(int64(ElectionTimeoutDelta)))
 }
 
 func randstring(n int) string {
