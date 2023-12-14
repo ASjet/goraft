@@ -21,12 +21,12 @@ type FollowerState struct {
 func Follower(term, follow int, from State) *FollowerState {
 	// Follower can come from any state
 	fs := &FollowerState{
-		BaseState: from.Base(),
+		BaseState: from.Base(term, follow),
 	}
-	fs.Follow(term, follow)
-	Info("%s new follower", fs)
+	Info("%s new follower with leader %d", fs, follow)
 
 	fs.timer = util.NewTimer(context.TODO(), heartbeatTimeout, fs.heartbeatTimeout).Start()
+
 	return fs
 }
 
@@ -41,10 +41,11 @@ func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 		return false
 	}
 
-	if s.Follow(args.Term, args.Candidate) {
+	if s.Close() {
 		Info("%s start following %d at term %d", s, args.Candidate, args.Term)
+		s.SyncTo(Follower(args.Term, args.Candidate, s))
 	}
-	s.timer.Restart()
+
 	return true
 }
 
@@ -91,6 +92,6 @@ func (s *FollowerState) Role() string {
 func (s *FollowerState) heartbeatTimeout() {
 	if s.closed.CompareAndSwap(false, true) {
 		Info("%s heartbeat timeout, migrate to candidate", s)
-		s.To(Candidate(s.Term()+1, s))
+		s.SyncTo(Candidate(s.Term()+1, s))
 	}
 }

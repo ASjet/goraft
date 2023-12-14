@@ -28,17 +28,18 @@ type CandidateState struct {
 func Candidate(term int, from State) *CandidateState {
 	// Candidate can come from any state
 	cs := &CandidateState{
-		BaseState: from.Base(),
+		// A candidate always vote for itself
+		BaseState: from.Base(term, from.Me()),
 	}
-	// A candidate always vote for itself
-	cs.Follow(term, cs.Me())
-	cs.votes = make(map[int]bool, cs.Peers())
-	cs.votes[cs.Me()] = true
 	Info("%s new candidate", cs)
 
+	cs.votes = make(map[int]bool, cs.Peers())
+	cs.votes[cs.Me()] = true
 	cs.timer = util.NewTimer(context.TODO(), electionTimeout, cs.electionTimeout).Start()
+
 	cs.wg.Add(1)
 	go cs.startElection()
+
 	return cs
 }
 
@@ -70,7 +71,7 @@ func (s *CandidateState) Role() string {
 func (s *CandidateState) electionTimeout() {
 	if s.closed.CompareAndSwap(false, true) {
 		Info("%s election timeout, start another election", s)
-		s.To(Candidate(s.Term()+1, s))
+		s.SyncTo(Candidate(s.Term()+1, s))
 	}
 }
 
@@ -103,12 +104,12 @@ func (s *CandidateState) requestVote(peerID int, peerRPC *labrpc.ClientEnd) {
 		if votes >= s.Majority() && s.Close() {
 			// Got majority votes, become leader
 			Info("%s got majority votes(%d/%d), migrate to leader", s, votes, s.Peers())
-			s.To(Leader(s))
+			s.SyncTo(Leader(s))
 		}
 	} else {
 		if curTerm := s.Term(); reply.Term > curTerm && s.Close() {
 			Info("%s got higher term %d (current %d), migrate to follower", s, reply.Term, curTerm)
-			s.To(Follower(reply.Term, NoVote, s))
+			s.SyncTo(Follower(reply.Term, NoVote, s))
 		}
 	}
 }

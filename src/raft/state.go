@@ -17,12 +17,14 @@ var (
 )
 
 type State interface {
-	To(state State)
-	Voted() int
 	Term() int
-	Base() BaseState
+	Voted() int
+	Me() int
+	Base(term, follow int) BaseState
 	String() string
 	Role() string
+
+	To(state State)
 	Close() (success bool)
 
 	// Call only term == curTerm
@@ -37,12 +39,12 @@ type State interface {
 
 // Basic raft states
 type BaseState struct {
-	// Mutable states
-	term   int
-	follow int
+	// Internal mutable states
+	r *Raft
 
 	// Immutable states
-	r *Raft
+	term   int
+	follow int
 }
 
 func Base(r *Raft) *BaseState {
@@ -55,8 +57,12 @@ func Base(r *Raft) *BaseState {
 
 // Getters
 
-func (s *BaseState) Base() BaseState {
-	return *s
+func (s *BaseState) Base(term, follow int) BaseState {
+	return BaseState{
+		term:   term,
+		follow: follow,
+		r:      s.r,
+	}
 }
 
 func (s *BaseState) Term() int {
@@ -94,14 +100,13 @@ func (s *BaseState) ValidEntries() bool {
 
 // Setters
 
-func (s *BaseState) Follow(term, peer int) (changed bool) {
-	changed = (s.follow != peer) || (s.term != term)
-	s.follow = peer
-	s.term = term
-	return changed
+func (s *BaseState) To(state State) {
+	s.r.state = state
 }
 
-func (s *BaseState) To(state State) {
+func (s *BaseState) SyncTo(state State) {
+	s.r.stateMu.Lock()
+	defer s.r.stateMu.Unlock()
 	s.r.state = state
 }
 

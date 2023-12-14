@@ -27,12 +27,13 @@ func Leader(from State) *LeaderState {
 	}
 
 	ls := &LeaderState{
-		BaseState: from.Base(),
+		BaseState: from.Base(from.Term(), from.Me()),
 	}
 	Info("%s new leader", ls)
 
 	ls.wg.Add(1)
 	go ls.sendHeartbeats()
+
 	return ls
 }
 
@@ -81,7 +82,7 @@ func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
 	if !reply.Success {
 		if curTerm := s.Term(); reply.Term > curTerm && s.Close() {
 			Info("%s got higher term %d (current %d), migrate to follower", s, reply.Term, curTerm)
-			s.To(Follower(reply.Term, NoVote, s))
+			s.SyncTo(Follower(reply.Term, NoVote, s))
 		}
 	}
 }

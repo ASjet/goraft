@@ -286,7 +286,9 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
+	rf.stateMu.Lock()
 	rf.state = Follower(0, NoVote, Base(rf))
+	rf.stateMu.Unlock()
 
 	// start ticker goroutine to start elections
 	go rf.ticker()
