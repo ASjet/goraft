@@ -21,6 +21,7 @@ const (
 )
 
 func init() {
+	llog.SetFlags(llog.Lmicroseconds)
 	logrus.SetLevel(logrus.DebugLevel)
 	logrus.SetFormatter(logrus.StandardLogger().Formatter)
 }
