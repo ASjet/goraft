@@ -19,3 +19,8 @@
 
 # Go workspace file
 go.work
+
+*.log
+*.plog
+
+__pycache__
