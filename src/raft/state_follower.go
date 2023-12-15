@@ -29,7 +29,7 @@ func Follower(term, follow int, from State) *FollowerState {
 		Info("%s new follower with leader %d", fs, follow)
 	}
 
-	fs.timer = util.NewTimer(context.TODO(), heartbeatTimeout, fs.heartbeatTimeout).Start()
+	fs.timer = util.NewTimer(context.TODO(), genHeartbeatTimeout(), fs.heartbeatTimeout).Start()
 
 	return fs
 }

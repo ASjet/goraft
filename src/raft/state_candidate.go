@@ -35,7 +35,7 @@ func Candidate(term int, from State) *CandidateState {
 
 	cs.votes = make(map[int]bool, cs.Peers())
 	cs.votes[cs.Me()] = true
-	cs.timer = util.NewTimer(context.TODO(), electionTimeout, cs.electionTimeout).Start()
+	cs.timer = util.NewTimer(context.TODO(), genElectionTimeout(), cs.electionTimeout).Start()
 
 	cs.wg.Add(1)
 	go cs.startElection()
