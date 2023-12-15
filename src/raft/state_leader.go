@@ -1,7 +1,6 @@
 package raft
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -57,7 +56,7 @@ func (s *LeaderState) Close() bool {
 }
 
 func (s *LeaderState) String() string {
-	return fmt.Sprintf("%d:%s%03d", s.Me(), s.Role(), s.Term())
+	return logPrefix(s)
 }
 
 func (s *LeaderState) Role() string {

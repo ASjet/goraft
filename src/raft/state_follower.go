@@ -2,7 +2,6 @@ package raft
 
 import (
 	"context"
-	"fmt"
 	"sync/atomic"
 
 	"goraft/src/util"
@@ -44,7 +43,7 @@ func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 		}
 
 		if s.Close() {
-			Info("%s start following %d at term %d", s, args.Candidate, args.Term)
+			Info("%s start following %d", s, args.Candidate)
 			s.To(Follower(args.Term, args.Candidate, s))
 		}
 
@@ -101,7 +100,7 @@ func (s *FollowerState) Close() bool {
 }
 
 func (s *FollowerState) String() string {
-	return fmt.Sprintf("%d:%s%03d", s.Me(), s.Role(), s.Term())
+	return logPrefix(s)
 }
 
 func (s *FollowerState) Role() string {

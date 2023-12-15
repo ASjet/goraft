@@ -1,6 +1,10 @@
 package raft
 
-import "goraft/src/labrpc"
+import (
+	"fmt"
+
+	"goraft/src/labrpc"
+)
 
 type MigrateFunc func(state State)
 
@@ -35,6 +39,14 @@ type State interface {
 	// Reply false if log doesn’t contain an entry at prevLogIndex
 	// whose term matches prevLogTerm (§5.3)
 	ValidEntries() bool
+}
+
+func logPrefix(s State) string {
+	vote := s.Voted()
+	if vote == NoVote {
+		return fmt.Sprintf("%d>n:%s%03d", s.Me(), s.Role(), s.Term())
+	}
+	return fmt.Sprintf("%d>%d:%s%03d", s.Me(), s.Voted(), s.Role(), s.Term())
 }
 
 // Basic raft states
@@ -121,6 +133,7 @@ func (s *BaseState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 }
 
 func (s *BaseState) String() string {
+	return logPrefix(s)
 	panic("not implemented")
 }
 

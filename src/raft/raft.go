@@ -126,6 +126,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
 	rf.stateMu.Lock()
 	defer rf.stateMu.Unlock()
+	Debug("%s RPC RequestVote from %d", rf.state, args.Candidate)
+	defer Debug("%s RPC RequestVote returned to %d", rf.state, args.Candidate)
 
 	reply.Term = rf.state.Term()
 
@@ -152,6 +154,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.stateMu.Lock()
 	defer rf.stateMu.Unlock()
+	Debug("%s RPC AppendEntries from %d", rf.state, args.Leader)
+	defer Debug("%s RPC AppendEntries  returned to %d", rf.state, args.Leader)
 
 	reply.Term = rf.state.Term()
 
