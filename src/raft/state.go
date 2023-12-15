@@ -104,10 +104,12 @@ func (s *BaseState) To(state State) {
 	s.r.state = state
 }
 
-func (s *BaseState) SyncTo(state State) {
+func (s *BaseState) Lock() {
 	s.r.stateMu.Lock()
-	defer s.r.stateMu.Unlock()
-	s.r.state = state
+}
+
+func (s *BaseState) Unlock() {
+	s.r.stateMu.Unlock()
 }
 
 func (s *BaseState) RequestVote(args *RequestVoteArgs) (granted bool) {

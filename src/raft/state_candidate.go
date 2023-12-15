@@ -76,8 +76,10 @@ func (s *CandidateState) Role() string {
 
 func (s *CandidateState) electionTimeout() {
 	if s.closed.CompareAndSwap(false, true) {
+		s.Lock()
 		Info("%s election timeout, start another election", s)
-		s.SyncTo(Candidate(s.Term()+1, s))
+		s.To(Candidate(s.Term()+1, s))
+		s.Unlock()
 	}
 }
 
@@ -109,14 +111,18 @@ func (s *CandidateState) requestVote(peerID int, peerRPC *labrpc.ClientEnd) {
 
 		if votes >= s.Majority() && s.Close() {
 			// Got majority votes, become leader
+			s.Lock()
 			Info("%s got majority votes(%d/%d), migrate to leader", s, votes, s.Peers())
-			s.SyncTo(Leader(s))
+			s.To(Leader(s))
+			s.Unlock()
 		}
 	} else {
+		s.Lock()
 		if curTerm := s.Term(); reply.Term > curTerm && s.Close() {
 			Info("%s got higher term %d (current %d), migrate to follower", s, reply.Term, curTerm)
-			s.SyncTo(Follower(reply.Term, NoVote, s))
+			s.To(Follower(reply.Term, NoVote, s))
 		}
+		s.Unlock()
 	}
 }
 

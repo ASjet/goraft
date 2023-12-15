@@ -44,7 +44,7 @@ func (s *LeaderState) RequestVote(args *RequestVoteArgs) (granted bool) {
 
 func (s *LeaderState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	// If this happened, it means there are multiple leaders
-	Warn("%s multiple leaders at same term: %d and %d", s, s.Me(), args.Leader)
+	Fatal("%s multiple leaders at same term: %d and %d", s, s.Me(), args.Leader)
 	return false
 }
 
@@ -83,10 +83,12 @@ func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
 		args.Term, args.Leader, reply.Term, reply.Success)
 
 	if !reply.Success {
+		s.Lock()
 		if curTerm := s.Term(); reply.Term > curTerm && s.Close() {
 			Info("%s got higher term %d (current %d), migrate to follower", s, reply.Term, curTerm)
-			s.SyncTo(Follower(reply.Term, NoVote, s))
+			s.To(Follower(reply.Term, NoVote, s))
 		}
+		s.Unlock()
 	}
 }
 
