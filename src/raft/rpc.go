@@ -17,8 +17,9 @@ type RequestVoteReply struct {
 }
 
 type AppendEntriesArgs struct {
-	Term   int
-	Leader int
+	Term    int
+	Leader  int
+	Entries []interface{}
 }
 
 type AppendEntriesReply struct {

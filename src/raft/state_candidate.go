@@ -44,11 +44,17 @@ func Candidate(term int, from State) *CandidateState {
 }
 
 func (s *CandidateState) RequestVote(args *RequestVoteArgs) (granted bool) {
+	// A candidate always rejects vote request from other candidates
 	return false
 }
 
 func (s *CandidateState) AppendEntries(args *AppendEntriesArgs) (success bool) {
-	return s.ValidEntries()
+	// A candidate only accept valid AppendEntries from current leader
+	if !s.ValidEntries() {
+		return false
+	}
+	s.To(Follower(args.Term, args.Leader, s))
+	return true
 }
 
 func (s *CandidateState) Close() bool {

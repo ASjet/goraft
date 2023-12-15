@@ -23,7 +23,11 @@ func Follower(term, follow int, from State) *FollowerState {
 	fs := &FollowerState{
 		BaseState: from.Base(term, follow),
 	}
-	Info("%s new follower with leader %d", fs, follow)
+	if follow == NoVote {
+		Info("%s new follower without leader", fs)
+	} else {
+		Info("%s new follower with leader %d", fs, follow)
+	}
 
 	fs.timer = util.NewTimer(context.TODO(), heartbeatTimeout, fs.heartbeatTimeout).Start()
 
@@ -41,11 +45,12 @@ func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 
 		if s.Close() {
 			Info("%s start following %d at term %d", s, args.Candidate, args.Term)
-			s.SyncTo(Follower(args.Term, args.Candidate, s))
+			s.To(Follower(args.Term, args.Candidate, s))
 		}
 
-		fallthrough
+		return true
 	case args.Candidate:
+		s.timer.Restart()
 		return true
 	default:
 		return false
@@ -53,27 +58,38 @@ func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 }
 
 func (s *FollowerState) AppendEntries(args *AppendEntriesArgs) (success bool) {
-	if s.Voted() != args.Leader {
+	switch s.Voted() {
+	case NoVote:
+		if !s.ValidEntries() {
+			return false
+		}
+
+		if s.Close() {
+			Info("%s start following %d at term %d", s, args.Leader, args.Term)
+			s.To(Follower(args.Term, args.Leader, s))
+		}
+
+		return true
+	case args.Leader:
+		s.timer.Restart()
+		if len(args.Entries) == 0 {
+			Debug("%s receive heartbeat from %d", s, args.Leader)
+			return true
+		}
+
+		// If an existing entry conflicts with a new one (same index but different terms),
+		// delete the existing entry and all that follow it (§5.3)
+
+		// Append any new entries not already in the log
+
+		// If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
+
+		// TODO: handle log entries
+
+		return true
+	default:
 		return false
 	}
-
-	if !s.ValidEntries() {
-		return false
-	}
-
-	Debug("%s receive heartbeat from %d", s, args.Leader)
-	s.timer.Restart()
-
-	// If an existing entry conflicts with a new one (same index but different terms),
-	// delete the existing entry and all that follow it (§5.3)
-
-	// Append any new entries not already in the log
-
-	// If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
-
-	// TODO: handle log entries
-
-	return true
 }
 
 func (s *FollowerState) Close() bool {

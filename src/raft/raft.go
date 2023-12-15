@@ -129,26 +129,24 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	reply.Term = rf.state.Term()
 
-	switch {
-	case args.Term < reply.Term:
+	if args.Term < reply.Term {
 		// Reply false if term < currentTerm (§5.1)
 		reply.Granted = false
-	case args.Term == reply.Term:
-		reply.Granted = rf.state.RequestVote(args)
-	case args.Term > reply.Term:
-		if !rf.state.ValidEntries() {
-			reply.Granted = false
-			return
-		}
-
-		// We got a higher term with valid log entries, migrate to follower
-		if rf.state.Close() {
-			Info("%s receive higher term %d (current %d) from %d, migrate to follower",
-				rf.state, args.Term, reply.Term, args.Candidate)
-			rf.state.To(Follower(args.Term, args.Candidate, rf.state))
-		}
-		reply.Granted = true
+		return
 	}
+
+	if args.Term > reply.Term {
+		// If RPC request or response contains term T > currentTerm:
+		// set currentTerm = T, convert to follower (§5.1)
+		// We don't valid the log entries here since we won't vote for it
+		if rf.state.Close() {
+			Info("%s receive higher term %d from %d, migrate to follower",
+				rf.state, args.Term, args.Candidate)
+			rf.state.To(Follower(args.Term, NoVote, rf.state))
+		}
+	}
+
+	reply.Granted = rf.state.RequestVote(args)
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
@@ -157,25 +155,24 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	reply.Term = rf.state.Term()
 
-	switch {
-	case args.Term < reply.Term:
+	if args.Term < reply.Term {
 		// Reply false if term < currentTerm (§5.1)
 		reply.Success = false
-	case args.Term == reply.Term:
-		reply.Success = rf.state.AppendEntries(args)
-	case args.Term > reply.Term:
-		if !rf.state.ValidEntries() {
-			reply.Success = false
-			return
-		}
-
-		if rf.state.Close() {
-			Info("%s receive higher term %d (current %d) from %d, migrate to follower",
-				rf.state, args.Term, reply.Term, args.Leader)
-			rf.state.To(Follower(args.Term, args.Leader, rf.state))
-		}
-		reply.Success = rf.state.AppendEntries(args)
+		return
 	}
+
+	if args.Term > reply.Term {
+		// If RPC request or response contains term T > currentTerm:
+		// set currentTerm = T, convert to follower (§5.1)
+		// We don't valid the log entries here since we won't vote for it
+		if rf.state.Close() {
+			Info("%s receive higher term %d from %d, migrate to follower",
+				rf.state, args.Term, args.Leader)
+			rf.state.To(Follower(args.Term, NoVote, rf.state))
+		}
+	}
+
+	reply.Success = rf.state.AppendEntries(args)
 }
 
 // example code to send a RequestVote RPC to a server.

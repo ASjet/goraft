@@ -38,10 +38,13 @@ func Leader(from State) *LeaderState {
 }
 
 func (s *LeaderState) RequestVote(args *RequestVoteArgs) (granted bool) {
+	// A leader always rejects vote request from other candidates
 	return false
 }
 
 func (s *LeaderState) AppendEntries(args *AppendEntriesArgs) (success bool) {
+	// If this happened, it means there are multiple leaders
+	Warn("%s multiple leaders at same term: %d and %d", s, s.Me(), args.Leader)
 	return false
 }
 
