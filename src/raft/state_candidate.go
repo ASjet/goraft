@@ -52,8 +52,10 @@ func (s *CandidateState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	if !s.ValidEntries() {
 		return false
 	}
-	Info("%s peer %d won this election, revert to follower", s, args.Leader)
-	s.To(Follower(args.Term, args.Leader, s))
+	if s.Close() {
+		Info("%s peer %d won this election, revert to follower", s, args.Leader)
+		s.To(Follower(args.Term, args.Leader, s))
+	}
 	return true
 }
 
