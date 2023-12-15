@@ -33,20 +33,23 @@ func Follower(term, follow int, from State) *FollowerState {
 // If votedFor is null or candidateId, and candidate’s log is at
 // least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
 func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
-	if s.Voted() != NoVote && s.Voted() != args.Candidate {
+	switch s.Voted() {
+	case NoVote:
+		if !s.ValidEntries() {
+			return false
+		}
+
+		if s.Close() {
+			Info("%s start following %d at term %d", s, args.Candidate, args.Term)
+			s.SyncTo(Follower(args.Term, args.Candidate, s))
+		}
+
+		fallthrough
+	case args.Candidate:
+		return true
+	default:
 		return false
 	}
-
-	if !s.ValidEntries() {
-		return false
-	}
-
-	if s.Close() {
-		Info("%s start following %d at term %d", s, args.Candidate, args.Term)
-		s.SyncTo(Follower(args.Term, args.Candidate, s))
-	}
-
-	return true
 }
 
 func (s *FollowerState) AppendEntries(args *AppendEntriesArgs) (success bool) {
