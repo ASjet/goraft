@@ -142,7 +142,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		// set currentTerm = T, convert to follower (§5.1)
 		// We don't valid the log entries here since we won't vote for it
 		if rf.state.Close() {
-			Info("%s receive higher term %d from %d, migrate to follower",
+			Info("%s receive higher term %d from %d, revert to follower",
 				rf.state, args.Term, args.Candidate)
 			rf.state.To(Follower(args.Term, NoVote, rf.state))
 		}
@@ -170,7 +170,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		// set currentTerm = T, convert to follower (§5.1)
 		// We don't valid the log entries here since we won't vote for it
 		if rf.state.Close() {
-			Info("%s receive higher term %d from %d, migrate to follower",
+			Info("%s receive higher term %d from %d, revert to follower",
 				rf.state, args.Term, args.Leader)
 			rf.state.To(Follower(args.Term, NoVote, rf.state))
 		}

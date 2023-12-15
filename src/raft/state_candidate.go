@@ -52,6 +52,7 @@ func (s *CandidateState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	if !s.ValidEntries() {
 		return false
 	}
+	Info("%s peer %d won this election, revert to follower", s, args.Leader)
 	s.To(Follower(args.Term, args.Leader, s))
 	return true
 }
@@ -111,14 +112,14 @@ func (s *CandidateState) requestVote(peerID int, peerRPC *labrpc.ClientEnd) {
 		if votes >= s.Majority() && s.Close() {
 			// Got majority votes, become leader
 			s.Lock()
-			Info("%s got majority votes(%d/%d), migrate to leader", s, votes, s.Peers())
+			Info("%s got majority votes(%d/%d), transition to leader", s, votes, s.Peers())
 			s.To(Leader(s))
 			s.Unlock()
 		}
 	} else {
 		s.Lock()
 		if curTerm := s.Term(); reply.Term > curTerm && s.Close() {
-			Info("%s got higher term %d (current %d), migrate to follower", s, reply.Term, curTerm)
+			Info("%s got higher term %d (current %d), transition to follower", s, reply.Term, curTerm)
 			s.To(Follower(reply.Term, NoVote, s))
 		}
 		s.Unlock()

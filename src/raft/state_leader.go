@@ -21,8 +21,8 @@ type LeaderState struct {
 func Leader(from State) *LeaderState {
 	// Leader can only come from candidate
 	if from.Role() != RoleCandidate {
-		Error("%s can not migrate to leader since it's not a candidate", from)
-		panic("invalid state transition: only candidate can migrate to leader")
+		Error("%s can not transition to leader since it's not a candidate", from)
+		panic("invalid state transition: only candidate can transition to leader")
 	}
 
 	ls := &LeaderState{
@@ -84,7 +84,7 @@ func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
 	if !reply.Success {
 		s.Lock()
 		if curTerm := s.Term(); reply.Term > curTerm && s.Close() {
-			Info("%s got higher term %d (current %d), migrate to follower", s, reply.Term, curTerm)
+			Info("%s got higher term %d (current %d), revert to follower", s, reply.Term, curTerm)
 			s.To(Follower(reply.Term, NoVote, s))
 		}
 		s.Unlock()

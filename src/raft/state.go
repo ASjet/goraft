@@ -6,8 +6,6 @@ import (
 	"goraft/src/labrpc"
 )
 
-type MigrateFunc func(state State)
-
 const (
 	NoVote int = -1
 
