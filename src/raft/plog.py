@@ -22,12 +22,12 @@ def mk_row(pid: int, n_peers: int, log: str) -> list[str]:
     return result
 
 
-def get_peers(stream: TextIO = sys.stdin) -> int:
+def get_peers(stream: TextIO = sys.stdin) -> tuple[int, str]:
     n_peers = 0
     for line in stream:
         match = ptn.match(line)
         if not match:
-            return n_peers
+            return n_peers, line.strip()
         n_peers += 1
 
 
@@ -35,21 +35,27 @@ def parse_groups(match: re.Match[str]) -> tuple[str, str, int, str, str, str, st
     time, level, _pid, vote, role, term, log = match.groups()
     return time, level, int(_pid), vote, role, term, log
 
-
-if __name__ == "__main__":
-    n_peers = get_peers()
+def read_one(stream: TextIO = sys.stdin) -> bool:
+    n_peers, title = get_peers(stream)
+    if not n_peers:
+        return False
 
     last_peer: int = None
     last_leader: int = None
 
-    table = Table(title="Raft Log", padding=0)
+    table = Table(title=title, padding=0)
     table.add_column("R", justify="center", no_wrap=True)  # Role
     table.add_column("V", justify="center", no_wrap=True)  # Term
     table.add_column("T", justify="center", no_wrap=True)  # Term
     for _ in range(n_peers):
         table.add_column(f"Peer {_}", justify="left", no_wrap=False)
 
+
     for line in sys.stdin:
+        if line.startswith("  ... Passed --"):
+            console = Console()
+            console.print(table)
+            return True
         match = ptn.match(line)
         if not match:
             continue
@@ -67,3 +73,8 @@ if __name__ == "__main__":
         table.add_row(*rows)
     console = Console()
     console.print(table)
+    return False
+
+if __name__ == "__main__":
+    while read_one(sys.stdin):
+        pass

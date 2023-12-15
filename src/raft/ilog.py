@@ -29,7 +29,12 @@ def print_stat(screen: ScreenContext, stats: dict[int, PeerStat], ts: str):
     table = Table(title="Raft Status", show_lines=True, highlight=True)
     table.add_column(ts, justify="right", no_wrap=True)  # Status
     for index, stat in stats.items():
-        table.add_column(f"Peer {index}", justify="left", no_wrap=False, style="green" if stat.updated else None)
+        table.add_column(
+            f"Peer {index}",
+            justify="left",
+            no_wrap=False,
+            style="green" if stat.updated else None,
+        )
         stat.updated = False
 
     table.add_row(*(["Term"] + list(map(lambda x: x.term, stats.values()))))
@@ -40,6 +45,8 @@ def print_stat(screen: ScreenContext, stats: dict[int, PeerStat], ts: str):
     if len(stat_history) == 2:
         stat_history.pop(0)
     stat_history.append(table)
+    stat_history[0].title = "Previous Status"
+    stat_history[-1].title = "Current Status"
     screen.update(*stat_history)
 
 
@@ -53,7 +60,7 @@ if __name__ == "__main__":
 
     console = Console()
     with open(log_file, "r") as f:
-        n_peers = get_peers(f)
+        n_peers, _ = get_peers(f)
         if not n_peers:
             console.print("No log found")
             sys.exit(1)
@@ -77,7 +84,7 @@ if __name__ == "__main__":
                 peer_stats[pid].term = str(term)
                 peer_stats[pid].vote = vote
                 peer_stats[pid].role = ROLE_NAME_MAP[role]
-                peer_stats[pid].log = f"[{_level[0]}]"+log
+                peer_stats[pid].log = f"[{_level[0]}]" + log
                 peer_stats[pid].updated = True
 
                 print_stat(screen, peer_stats, ts)
