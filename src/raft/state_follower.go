@@ -38,16 +38,7 @@ func Follower(term, follow int, from State) *FollowerState {
 func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 	switch s.Voted() {
 	case NoVote:
-		if !s.ValidEntries() {
-			return false
-		}
-
-		if s.Close() {
-			Info("%s start following %d", s, args.Candidate)
-			s.To(Follower(args.Term, args.Candidate, s))
-		}
-
-		return true
+		return s.follow(args.Term, args.Candidate)
 	case args.Candidate:
 		s.timer.Restart()
 		return true
@@ -59,33 +50,10 @@ func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 func (s *FollowerState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	switch s.Voted() {
 	case NoVote:
-		if !s.ValidEntries() {
-			return false
-		}
-
-		if s.Close() {
-			Info("%s start following %d at term %d", s, args.Leader, args.Term)
-			s.To(Follower(args.Term, args.Leader, s))
-		}
-
-		return true
+		return s.follow(args.Term, args.Leader)
 	case args.Leader:
 		s.timer.Restart()
-		if len(args.Entries) == 0 {
-			Debug("%s receive heartbeat from %d", s, args.Leader)
-			return true
-		}
-
-		// If an existing entry conflicts with a new one (same index but different terms),
-		// delete the existing entry and all that follow it (§5.3)
-
-		// Append any new entries not already in the log
-
-		// If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
-
-		// TODO: handle log entries
-
-		return true
+		return s.handleEntries(args.Entries)
 	default:
 		return false
 	}
@@ -114,4 +82,35 @@ func (s *FollowerState) heartbeatTimeout() {
 		s.To(Candidate(s.Term()+1, s))
 		s.Unlock()
 	}
+}
+
+func (s *FollowerState) follow(term, peer int) bool {
+	if !s.ValidEntries() {
+		return false
+	}
+
+	if s.Close() {
+		Info("%s start following %d", s, peer)
+		s.To(Follower(term, peer, s))
+	}
+	return true
+}
+
+func (s *FollowerState) handleEntries(entries []interface{}) bool {
+	if len(entries) == 0 {
+		Debug("%s receive heartbeat from %d", s, s.Voted())
+		return true
+	}
+
+	// If an existing entry conflicts with a new one (same index but different terms),
+	// delete the existing entry and all that follow it (§5.3)
+
+	// Append any new entries not already in the log
+
+	// If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
+
+	// TODO: handle log entries
+
+	return true
+
 }
