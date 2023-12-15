@@ -245,7 +245,9 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 func (rf *Raft) Kill() {
 	rf.dead.Store(true)
 	// Your code here, if desired.
+	rf.stateMu.Lock()
 	rf.state.Close()
+	rf.stateMu.Unlock()
 }
 
 func (rf *Raft) killed() bool {
