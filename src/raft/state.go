@@ -39,6 +39,7 @@ type State interface {
 	ValidEntries() bool
 }
 
+// logPrefix always access the state's immutable fields
 func logPrefix(s State) string {
 	vote := s.Voted()
 	if vote == NoVote {
@@ -47,12 +48,9 @@ func logPrefix(s State) string {
 	return fmt.Sprintf("%d>%d:%s%03d", s.Me(), s.Voted(), s.Role(), s.Term())
 }
 
-// Basic raft states
+// Immutable basic raft states
 type BaseState struct {
-	// Internal mutable states
-	r *Raft
-
-	// Immutable states
+	r      *Raft
 	term   int
 	follow int
 }
