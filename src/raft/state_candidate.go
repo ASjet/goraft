@@ -43,15 +43,12 @@ func Candidate(term int, from State) *CandidateState {
 }
 
 func (s *CandidateState) RequestVote(args *RequestVoteArgs) (granted bool) {
-	// A candidate always rejects vote request from other candidates
+	// A candidate always rejects vote request from other candidates in the same term
 	return false
 }
 
 func (s *CandidateState) AppendEntries(args *AppendEntriesArgs) (success bool) {
-	// A candidate only accept valid AppendEntries from current leader
-	if !s.ValidEntries() {
-		return false
-	}
+	// If this RPC is received, it means the leader of this term is already elected
 	if s.Close() {
 		Info("%s peer %d won this election, revert to follower", s, args.Leader)
 		s.To(Follower(args.Term, args.Leader, s))

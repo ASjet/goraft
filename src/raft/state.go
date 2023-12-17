@@ -26,17 +26,13 @@ type State interface {
 	String() string
 	Role() string
 
-	To(state State)
+	To(state State) (newState State)
 	Close() (success bool)
 
 	// Call only term == curTerm
 	RequestVote(args *RequestVoteArgs) (granted bool)
 	// Call only term == curTerm
 	AppendEntries(args *AppendEntriesArgs) (success bool)
-
-	// Reply false if log doesn’t contain an entry at prevLogIndex
-	// whose term matches prevLogTerm (§5.3)
-	ValidEntries() bool
 }
 
 // logPrefix always access the state's immutable fields
@@ -101,15 +97,11 @@ func (s *BaseState) PollPeers(f func(peerID int, peerRPC *labrpc.ClientEnd)) {
 	}
 }
 
-func (s *BaseState) ValidEntries() bool {
-	// TODO: valid log entries
-	return true
-}
-
 // Setters
 
-func (s *BaseState) To(state State) {
+func (s *BaseState) To(state State) State {
 	s.r.state = state
+	return state
 }
 
 func (s *BaseState) Lock() {
@@ -130,7 +122,6 @@ func (s *BaseState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 
 func (s *BaseState) String() string {
 	return logPrefix(s)
-	panic("not implemented")
 }
 
 func (s *BaseState) Role() string {

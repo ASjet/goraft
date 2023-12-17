@@ -45,6 +45,11 @@ type ApplyMsg struct {
 	SnapshotIndex int
 }
 
+type Log struct {
+	Term int
+	Data interface{}
+}
+
 // A Go object implementing a single Raft peer.
 type Raft struct {
 	// Immutable states
@@ -62,6 +67,7 @@ type Raft struct {
 	// Internal mutable states
 	stateMu sync.Mutex
 	state   State
+	logs    []Log
 }
 
 // return currentTerm and whether this server
@@ -287,6 +293,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.peers = peers
 	rf.persister = persister
 	rf.me = me
+	rf.logs = make([]Log, 0)
 
 	// Your initialization code here (2A, 2B, 2C).
 

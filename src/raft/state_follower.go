@@ -38,7 +38,14 @@ func Follower(term, follow int, from State) *FollowerState {
 func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 	switch s.Voted() {
 	case NoVote:
-		return s.follow(args.Term, args.Candidate)
+		if !s.validRequestVote(args.LastLogIndex, args.LastLogTerm) {
+			return false
+		}
+		if s.Close() {
+			Info("%s start following %d", s, args.Candidate)
+			s.To(Follower(args.Term, args.Candidate, s))
+		}
+		return true
 	case args.Candidate:
 		s.timer.Restart()
 		return true
@@ -50,10 +57,16 @@ func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 func (s *FollowerState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	switch s.Voted() {
 	case NoVote:
-		return s.follow(args.Term, args.Leader)
+		if s.Close() {
+			Info("%s start following %d", s, args.Leader)
+			ns := s.To(Follower(args.Term, args.Leader, s))
+			return ns.AppendEntries(args)
+		}
+		return false
 	case args.Leader:
 		s.timer.Restart()
-		return s.handleEntries(args.Entries)
+		defer s.commit(args.LeaderCommit)
+		return s.handleEntries(args.PrevLogIndex, args.PrevLogTerm, args.Entries)
 	default:
 		return false
 	}
@@ -84,19 +97,37 @@ func (s *FollowerState) heartbeatTimeout() {
 	}
 }
 
-func (s *FollowerState) follow(term, peer int) bool {
-	if !s.ValidEntries() {
+// Reply false if log doesn’t contain an entry at prevLogIndex
+// whose term matches prevLogTerm (§5.3)
+func (s *FollowerState) validRequestVote(lastLogIndex, lastLogTerm int) bool {
+	curLastIndex := len(s.r.logs) - 1
+	if curLastIndex < 0 {
+		// There is no log entry yet, so any entry is valid
+		return true
+	}
+	curLastTerm := s.r.logs[curLastIndex].Term
+
+	// From 5.4.1:
+	// If the logs have last entries with different terms, then
+	// the log with the later term is more up-to-date.
+	if lastLogTerm < curLastTerm {
 		return false
 	}
-
-	if s.Close() {
-		Info("%s start following %d", s, peer)
-		s.To(Follower(term, peer, s))
+	if lastLogTerm > curLastTerm {
+		return true
 	}
-	return true
+
+	// From 5.4.1:
+	// If the logs end with the same term, then
+	// whichever log is longer is more up-to-date.
+	return lastLogIndex >= curLastIndex
 }
 
-func (s *FollowerState) handleEntries(entries []interface{}) bool {
+func (s *FollowerState) commit(index int) {
+	// TODO: commit log entries
+}
+
+func (s *FollowerState) handleEntries(prevIndex, prevTerm int, entries []Log) bool {
 	if len(entries) == 0 {
 		Debug("%s receive heartbeat from %d", s, s.Voted())
 		return true
@@ -112,5 +143,4 @@ func (s *FollowerState) handleEntries(entries []interface{}) bool {
 	// TODO: handle log entries
 
 	return true
-
 }
