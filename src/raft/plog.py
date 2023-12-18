@@ -5,9 +5,9 @@ from typing import TextIO
 from rich.console import Console
 from rich.table import Table
 
-# hh:mm:ss.(us) [$LEVEL{4}]$ID{1}>$VOTED{1}:$ROLE{1}$TERM{2} ${LOG}
+# hh:mm:ss.(us) [$LEVEL{4}]$ID{1}>$VOTED{1}:$ROLE{1}$TERM{2}:$LOGS@$COMMIT ${LOG}
 ptn = re.compile(
-    r"^(\d{2}:\d{2}:\d{2}.\d{6})\s+\[(\w+)\](\d{1})>(\w{1}):(\w{1})(\d+)\s+(.*)$"
+    r"^(\d{2}:\d{2}:\d{2}.\d{6})\s+\[(\w+)\](\d+)>(\w+):(\w{1})(\d+):(\d+)@(\d+)\s+(.*)$"
 )
 
 NO_VOTE = "n"
@@ -32,7 +32,7 @@ def get_peers(stream: TextIO = sys.stdin) -> tuple[int, str]:
 
 
 def parse_groups(match: re.Match[str]) -> tuple[str, str, int, str, str, str, str]:
-    time, level, _pid, vote, role, term, log = match.groups()
+    time, level, _pid, vote, role, term, _logs, _commit, log = match.groups()
     return time, level, int(_pid), vote, role, term, log
 
 def read_one(stream: TextIO = sys.stdin) -> bool:
