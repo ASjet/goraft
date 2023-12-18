@@ -71,7 +71,7 @@ type Raft struct {
 
 	logMu          sync.RWMutex // Must hold this lock when accessing following fields
 	logIndexOffset int          // The index of the first log entry in logs
-	logs           []Log        // The actually log entries
+	logs           []Log        // The actually log entries, the first elem is a dummy entry
 	commitIndex    int          // The index of highest log entry known to be committed
 }
 
@@ -133,7 +133,7 @@ func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int,
 // that index. Raft should now trim its log as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	// Your code here (2D).
-
+	// NOTE: Need to maintain the log index offset and dummy log entry
 }
 
 // example RequestVote RPC handler.
@@ -192,6 +192,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	reply.Success = rf.state.AppendEntries(args)
+	rf.logMu.RLock()
+	reply.LastLogIndex = rf.state.LastLogIndex()
+	if logs := len(rf.logs); logs > 0 {
+		reply.LastLogTerm = rf.logs[logs-1].Term
+	}
+	rf.logMu.RUnlock()
 }
 
 // the service using Raft (e.g. a k/v server) wants to start
@@ -258,7 +264,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.peers = peers
 	rf.persister = persister
 	rf.me = me
-	rf.logs = make([]Log, 0)
+	rf.logs = []Log{{0, nil}}
 	rf.applyCh = applyCh
 
 	// Your initialization code here (2A, 2B, 2C).

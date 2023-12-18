@@ -65,8 +65,9 @@ func (s *FollowerState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 		return false
 	case args.Leader:
 		s.timer.Restart()
-		defer s.commit(args.LeaderCommit)
-		return s.handleEntries(args.PrevLogIndex, args.PrevLogTerm, args.Entries)
+		// If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
+		defer s.CommitLog(args.LeaderCommit)
+		return s.handleEntries(args.Leader, args.PrevLogIndex, args.PrevLogTerm, args.Entries)
 	default:
 		return false
 	}
@@ -123,24 +124,36 @@ func (s *FollowerState) validRequestVote(lastLogIndex, lastLogTerm int) bool {
 	return lastLogIndex >= curLastIndex
 }
 
-func (s *FollowerState) commit(index int) {
-	// TODO: commit log entries
-}
-
-func (s *FollowerState) handleEntries(prevIndex, prevTerm int, entries []Log) bool {
+func (s *FollowerState) handleEntries(leader, prevIndex, prevTerm int, entries []Log) bool {
 	if len(entries) == 0 {
-		Debug("%s receive heartbeat from %d", s, s.Voted())
+		Debug("%s receive heartbeat from %d", s, leader)
 		return true
+	}
+
+	s.LockLog()
+	defer s.UnlockLog()
+
+	// Reply false if log doesn’t contain an entry at prevLogIndex
+	// whose term matches prevLogTerm (§5.3)
+	if prevIndex > s.LastLogIndex() {
+		return false
+	}
+
+	_, prevLog := s.GetLog(prevIndex)
+	if prevLog == nil {
+		// The previous log entry is already trimmed
+		return false
 	}
 
 	// If an existing entry conflicts with a new one (same index but different terms),
 	// delete the existing entry and all that follow it (§5.3)
+	if prevLog.Term != prevTerm {
+		s.DeleteLogSince(prevIndex)
+		return false
+	}
 
 	// Append any new entries not already in the log
-
-	// If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
-
-	// TODO: handle log entries
+	s.AppendLogs(entries...)
 
 	return true
 }

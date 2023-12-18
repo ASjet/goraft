@@ -22,9 +22,12 @@ type State interface {
 	Term() int
 	Voted() int
 	Me() int
+	Peers() int
 	Role() string
 	Base(term, follow int) BaseState
 	String() string
+	LastLogIndex() int
+	Committed() int
 
 	To(state State) (newState State)
 	Close() (success bool)
@@ -41,9 +44,9 @@ type State interface {
 func logPrefix(s State) string {
 	vote := s.Voted()
 	if vote == NoVote {
-		return fmt.Sprintf("%d>n:%s%03d", s.Me(), s.Role(), s.Term())
+		return fmt.Sprintf("%d>n:%s%03d:%02d@%02d", s.Me(), s.Role(), s.Term(), s.LastLogIndex(), s.Committed())
 	}
-	return fmt.Sprintf("%d>%d:%s%03d", s.Me(), s.Voted(), s.Role(), s.Term())
+	return fmt.Sprintf("%d>%d:%s%03d:%02d@%02d", s.Me(), s.Voted(), s.Role(), s.Term(), s.LastLogIndex(), s.Committed())
 }
 
 // Immutable basic raft states
@@ -99,6 +102,35 @@ func (s *BaseState) PollPeers(f func(peerID int, peerRPC *labrpc.ClientEnd)) {
 	}
 }
 
+func (s *BaseState) LastLogIndex() int {
+	return len(s.r.logs) + s.r.logIndexOffset - 1 // -1 for dummy entry
+}
+
+// Call with holding LogRWLock
+func (s *BaseState) GetLog(index int) (int, *Log) {
+	index = s.logIndexWithOffset(index)
+	if index < 0 || index >= len(s.r.logs) {
+		return s.r.logIndexOffset + index, nil
+	}
+	return s.r.logIndexOffset + index, &s.r.logs[index]
+}
+
+func (s *BaseState) GetLogSince(index int) []Log {
+	index = s.logIndexWithOffset(index)
+	if index < 0 || index >= len(s.r.logs) {
+		return nil
+	}
+	return s.r.logs[index:]
+}
+
+func (s *BaseState) Committed() int {
+	return s.r.commitIndex
+}
+
+func (s *BaseState) LogOffset() int {
+	return s.r.logIndexOffset
+}
+
 // Setters
 
 func (s *BaseState) To(state State) State {
@@ -112,6 +144,61 @@ func (s *BaseState) Lock() {
 
 func (s *BaseState) Unlock() {
 	s.r.stateMu.Unlock()
+}
+
+func (s *BaseState) RLockLog() {
+	s.r.logMu.RLock()
+}
+
+func (s *BaseState) RUnlockLog() {
+	s.r.logMu.RUnlock()
+}
+
+func (s *BaseState) LockLog() {
+	s.r.logMu.Lock()
+}
+
+func (s *BaseState) UnlockLog() {
+	s.r.logMu.Unlock()
+}
+
+func (s *BaseState) AppendLogs(logs ...Log) (index int) {
+	s.r.logs = append(s.r.logs, logs...)
+	return s.LastLogIndex()
+}
+
+func (s *BaseState) DeleteLogSince(index int) (n int) {
+	index = s.logIndexWithOffset(index)
+	if index < 0 || index >= len(s.r.logs) {
+		return 0
+	}
+	deleted := s.r.logs[index:]
+	s.r.logs = s.r.logs[:index]
+	return len(deleted)
+}
+
+// This will acquire log lock, use go routine to avoid deadlock
+func (s *BaseState) CommitLog(index int) {
+	s.LockLog()
+	defer s.UnlockLog()
+
+	for s.r.commitIndex < index {
+		i, log := s.GetLog(s.r.commitIndex + 1)
+		if log == nil {
+			return
+		}
+		s.r.commitIndex++
+		if i != s.r.commitIndex {
+			Fatal("%s commit index not match with log offset")
+		}
+		s.r.applyCh <- ApplyMsg{
+			CommandValid: true,
+			Command:      log.Data,
+			CommandIndex: i,
+		}
+	}
+
+	defer Info("%s log[:%d] committed", s, s.r.commitIndex)
 }
 
 func (s *BaseState) RequestVote(args *RequestVoteArgs) (granted bool) {
@@ -136,4 +223,12 @@ func (s *BaseState) Role() string {
 
 func (s *BaseState) Close() bool {
 	panic("not implemented")
+}
+
+func (s *BaseState) logIndexWithOffset(index int) int {
+	if index < 0 {
+		return len(s.r.logs) + index
+	} else {
+		return index - s.r.logIndexOffset
+	}
 }

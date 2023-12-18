@@ -1,5 +1,7 @@
 package raft
 
+import "fmt"
+
 // example RequestVote RPC arguments structure.
 // field names must start with capital letters!
 type RequestVoteArgs struct {
@@ -27,7 +29,22 @@ type AppendEntriesArgs struct {
 	LeaderCommit int
 }
 
+func (s *AppendEntriesArgs) String() string {
+	if len(s.Entries) > 0 {
+		return fmt.Sprintf("T:%d,E:%d,PI:%d,PT:%d,C:%d",
+			s.Term, len(s.Entries), s.PrevLogIndex, s.PrevLogTerm, s.LeaderCommit)
+	}
+	return fmt.Sprintf("T:%d,C:%d,Heartbeat", s.Term, s.LeaderCommit)
+}
+
 type AppendEntriesReply struct {
-	Term    int
-	Success bool
+	Term         int
+	Success      bool
+	LastLogIndex int
+	LastLogTerm  int
+}
+
+func (s *AppendEntriesReply) String() string {
+	return fmt.Sprintf("T:%d,S:%v,LI:%d,LT:%d",
+		s.Term, s.Success, s.LastLogIndex, s.LastLogTerm)
 }

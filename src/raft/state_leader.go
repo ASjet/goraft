@@ -16,6 +16,9 @@ type LeaderState struct {
 	BaseState
 	wg     sync.WaitGroup
 	closed atomic.Bool
+
+	nextIndex  []int // The next index -1 is guaranteed existed
+	matchIndex []int
 }
 
 func Leader(from State) *LeaderState {
@@ -26,7 +29,13 @@ func Leader(from State) *LeaderState {
 	}
 
 	ls := &LeaderState{
-		BaseState: from.Base(from.Term(), from.Me()),
+		BaseState:  from.Base(from.Term(), from.Me()),
+		nextIndex:  make([]int, from.Peers()),
+		matchIndex: make([]int, from.Peers()),
+	}
+	nextIndex := ls.LastLogIndex() + 1
+	for i := range ls.nextIndex {
+		ls.nextIndex[i] = nextIndex
 	}
 	Info("%s new leader", ls)
 
@@ -47,6 +56,18 @@ func (s *LeaderState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	return false
 }
 
+func (s *LeaderState) AppendCommand(command interface{}) (index int, term int) {
+	term = s.Term()
+	s.LockLog()
+	index = s.AppendLogs(Log{
+		Term: term,
+		Data: command,
+	})
+	s.UnlockLog()
+	s.syncEntries()
+	return
+}
+
 func (s *LeaderState) Close() bool {
 	if !s.closed.CompareAndSwap(false, true) {
 		return false
@@ -63,32 +84,30 @@ func (s *LeaderState) Role() string {
 	return RoleLeader
 }
 
-func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
-	args := &AppendEntriesArgs{
-		Term:   s.Term(),
-		Leader: s.Me(),
-	}
-	reply := new(AppendEntriesReply)
-	Debug("%s calling peers[%d].AppendEntries(%d, %d)", s, peerID,
-		args.Term, args.Leader)
+func (s *LeaderState) callAppendEntries(args *AppendEntriesArgs, peerID int,
+	peerRPC *labrpc.ClientEnd) (reply *AppendEntriesReply, ok bool) {
+	reply = new(AppendEntriesReply)
+	Debug("%s calling peers[%d].AppendEntries(%s)", s, peerID, args)
 	if !peerRPC.Call("Raft.AppendEntries", args, reply) || s.closed.Load() {
 		if !s.closed.Load() {
-			Error("%s peers[%d].AppendEntries(%d, %d) failed", s, peerID,
-				args.Term, args.Leader)
+			Error("%s peers[%d].AppendEntries(%s) failed", s, peerID, args)
 		}
-		return
+		return nil, false
 	}
-	Debug("%s peers[%d].AppendEntries(%d, %d) => (%d, %v)", s, peerID,
-		args.Term, args.Leader, reply.Term, reply.Success)
-
+	Debug("%s peers[%d].AppendEntries(%s) => (%s)", s, peerID, args, reply)
+	ok = true
 	if !reply.Success {
 		s.Lock()
-		if curTerm := s.Term(); reply.Term > curTerm && s.Close() {
-			Info("%s got higher term %d (current %d), revert to follower", s, reply.Term, curTerm)
-			s.To(Follower(reply.Term, NoVote, s))
+		if curTerm := s.Term(); reply.Term > curTerm {
+			ok = false
+			if s.Close() {
+				Info("%s got higher term %d (current %d), revert to follower", s, reply.Term, curTerm)
+				s.To(Follower(reply.Term, NoVote, s))
+			}
 		}
 		s.Unlock()
 	}
+	return reply, ok
 }
 
 func (s *LeaderState) sendHeartbeats() {
@@ -108,4 +127,51 @@ func (s *LeaderState) sendHeartbeats() {
 		Info("%s waiting for next heartbeats", s)
 		time.Sleep(HeartBeatInterval)
 	}
+}
+
+func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
+	s.RLockLog()
+	args := &AppendEntriesArgs{
+		Term:         s.Term(),
+		Leader:       s.Me(),
+		LeaderCommit: s.Committed(),
+	}
+	s.RUnlockLog()
+	s.callAppendEntries(args, peerID, peerRPC)
+}
+
+func (s *LeaderState) syncEntries() {
+	Info("%s sync entries to peers", s)
+	s.PollPeers(s.syncPeerEntries)
+}
+
+func (s *LeaderState) syncPeerEntries(peerID int, peerRPC *labrpc.ClientEnd) {
+	nextIndex := s.nextIndex[peerID]
+	s.RLockLog()
+	prevIndex, prevLog := s.GetLog(nextIndex - 1)
+	args := &AppendEntriesArgs{
+		Term:         s.Term(),
+		Leader:       s.Me(),
+		PrevLogIndex: prevIndex,
+		PrevLogTerm:  prevLog.Term,
+		Entries:      s.GetLogSince(nextIndex),
+		LeaderCommit: s.Committed(),
+	}
+	s.RUnlockLog()
+
+	reply, ok := s.callAppendEntries(args, peerID, peerRPC)
+	if !ok {
+		return
+	}
+
+	if reply.Success {
+		s.Lock()
+		s.nextIndex[peerID] = reply.LastLogIndex + 1
+		s.matchIndex[peerID] = reply.LastLogIndex
+		s.Unlock()
+		return
+	}
+
+	// TODO: handle conflict
+
 }
