@@ -22,9 +22,9 @@ type State interface {
 	Term() int
 	Voted() int
 	Me() int
+	Role() string
 	Base(term, follow int) BaseState
 	String() string
-	Role() string
 
 	To(state State) (newState State)
 	Close() (success bool)
@@ -33,6 +33,8 @@ type State interface {
 	RequestVote(args *RequestVoteArgs) (granted bool)
 	// Call only term == curTerm
 	AppendEntries(args *AppendEntriesArgs) (success bool)
+
+	AppendCommand(command interface{}) (index int, term int)
 }
 
 // logPrefix always access the state's immutable fields
@@ -117,6 +119,10 @@ func (s *BaseState) RequestVote(args *RequestVoteArgs) (granted bool) {
 }
 
 func (s *BaseState) AppendEntries(args *AppendEntriesArgs) (success bool) {
+	panic("not implemented")
+}
+
+func (s *BaseState) AppendCommand(command interface{}) (index int, term int) {
 	panic("not implemented")
 }
 

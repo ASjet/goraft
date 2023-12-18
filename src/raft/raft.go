@@ -58,7 +58,8 @@ type Raft struct {
 	me        int                 // this peer's index into peers[]
 
 	// External mutable states
-	dead atomic.Bool // set by Kill()
+	dead    atomic.Bool // set by Kill()
+	applyCh chan ApplyMsg
 
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
@@ -67,7 +68,11 @@ type Raft struct {
 	// Internal mutable states
 	stateMu sync.Mutex
 	state   State
-	logs    []Log
+
+	logMu          sync.RWMutex // Must hold this lock when accessing following fields
+	logIndexOffset int          // The index of the first log entry in logs
+	logs           []Log        // The actually log entries
+	commitIndex    int          // The index of highest log entry known to be committed
 }
 
 // return currentTerm and whether this server
@@ -189,38 +194,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	reply.Success = rf.state.AppendEntries(args)
 }
 
-// example code to send a RequestVote RPC to a server.
-// server is the index of the target server in rf.peers[].
-// expects RPC arguments in args.
-// fills in *reply with RPC reply, so caller should
-// pass &reply.
-// the types of the args and reply passed to Call() must be
-// the same as the types of the arguments declared in the
-// handler function (including whether they are pointers).
-//
-// The labrpc package simulates a lossy network, in which servers
-// may be unreachable, and in which requests and replies may be lost.
-// Call() sends a request and waits for a reply. If a reply arrives
-// within a timeout interval, Call() returns true; otherwise
-// Call() returns false. Thus Call() may not return for a while.
-// A false return can be caused by a dead server, a live server that
-// can't be reached, a lost request, or a lost reply.
-//
-// Call() is guaranteed to return (perhaps after a delay) *except* if the
-// handler function on the server side does not return.  Thus there
-// is no need to implement your own timeouts around Call().
-//
-// look at the comments in ../labrpc/labrpc.go for more details.
-//
-// if you're having trouble getting RPC to work, check that you've
-// capitalized all field names in structs passed over RPC, and
-// that the caller passes the address of the reply struct with &, not
-// the struct itself.
-func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
-	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
-	return ok
-}
-
 // the service using Raft (e.g. a k/v server) wants to start
 // agreement on the next command to be appended to Raft's log. if this
 // server isn't the leader, returns false. otherwise start the
@@ -236,9 +209,15 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	index := -1
 	term := -1
-	isLeader := true
+	isLeader := false
 
 	// Your code here (2B).
+	rf.stateMu.Lock()
+	defer rf.stateMu.Unlock()
+
+	if isLeader = rf.state.Role() == RoleLeader; isLeader {
+		index, term = rf.state.AppendCommand(command)
+	}
 
 	return index, term, isLeader
 }
@@ -264,20 +243,6 @@ func (rf *Raft) killed() bool {
 	return rf.dead.Load()
 }
 
-// The ticker go routine starts a new election if this peer hasn't received
-// heartsbeats recently.
-func (rf *Raft) ticker() {
-	for !rf.killed() {
-
-		// Your code here to check if a leader election should
-		// be started and to randomize sleeping time using
-		// time.Sleep().
-
-		// This will do nothing
-
-	}
-}
-
 // the service or tester wants to create a Raft server. the ports
 // of all the Raft servers (including this one) are in peers[]. this
 // server's port is peers[me]. all the servers' peers[] arrays
@@ -294,6 +259,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.persister = persister
 	rf.me = me
 	rf.logs = make([]Log, 0)
+	rf.applyCh = applyCh
 
 	// Your initialization code here (2A, 2B, 2C).
 
@@ -303,9 +269,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.stateMu.Lock()
 	rf.state = Follower(0, NoVote, Base(rf))
 	rf.stateMu.Unlock()
-
-	// start ticker goroutine to start elections
-	go rf.ticker()
 
 	return rf
 }
