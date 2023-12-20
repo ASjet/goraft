@@ -1,6 +1,8 @@
 package raft
 
 import (
+	"slices"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,13 +14,19 @@ var (
 	_ State = (*LeaderState)(nil)
 )
 
+type matchRecord struct {
+	peer  int
+	index int
+}
+
 type LeaderState struct {
 	BaseState
 	wg     sync.WaitGroup
 	closed atomic.Bool
 
-	nextIndex  []int // The next index -1 is guaranteed existed
-	matchIndex []int
+	nextIndexes  []atomic.Int64
+	matchIndexes []atomic.Int64
+	matchCh      chan matchRecord
 }
 
 func Leader(from State) *LeaderState {
@@ -29,18 +37,20 @@ func Leader(from State) *LeaderState {
 	}
 
 	ls := &LeaderState{
-		BaseState:  from.Base(from.Term(), from.Me()),
-		nextIndex:  make([]int, from.Peers()),
-		matchIndex: make([]int, from.Peers()),
+		BaseState:    from.Base(from.Term(), from.Me()),
+		nextIndexes:  make([]atomic.Int64, from.Peers()),
+		matchIndexes: make([]atomic.Int64, from.Peers()),
+		matchCh:      make(chan matchRecord, from.Peers()),
 	}
-	nextIndex := ls.LastLogIndex() + 1
-	for i := range ls.nextIndex {
-		ls.nextIndex[i] = nextIndex
+	nextIndex := int64(ls.LastLogIndex() + 1)
+	for i := range ls.nextIndexes {
+		ls.nextIndexes[i].Store(nextIndex)
 	}
 	Info("%s new leader", ls)
 
-	ls.wg.Add(1)
+	ls.wg.Add(2)
 	go ls.sendHeartbeats()
+	go ls.commitMatch(from.Peers())
 
 	return ls
 }
@@ -64,7 +74,9 @@ func (s *LeaderState) AppendCommand(command interface{}) (index int, term int) {
 		Data: command,
 	})
 	s.UnlockLog()
-	s.syncEntries()
+	Info("%s append new command %v to index %d", s, command, index)
+	s.PollPeers(s.syncPeerEntries)
+	Info("%s sync entries to peers", s)
 	return
 }
 
@@ -72,6 +84,7 @@ func (s *LeaderState) Close() bool {
 	if !s.closed.CompareAndSwap(false, true) {
 		return false
 	}
+	close(s.matchCh)
 	s.wg.Wait()
 	return true
 }
@@ -84,6 +97,7 @@ func (s *LeaderState) Role() string {
 	return RoleLeader
 }
 
+// This should be called concurrently rather than one-by-one
 func (s *LeaderState) callAppendEntries(args *AppendEntriesArgs, peerID int,
 	peerRPC *labrpc.ClientEnd) (reply *AppendEntriesReply, ok bool) {
 	reply = new(AppendEntriesReply)
@@ -140,14 +154,9 @@ func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
 	s.callAppendEntries(args, peerID, peerRPC)
 }
 
-func (s *LeaderState) syncEntries() {
-	Info("%s sync entries to peers", s)
-	s.PollPeers(s.syncPeerEntries)
-}
-
 func (s *LeaderState) syncPeerEntries(peerID int, peerRPC *labrpc.ClientEnd) {
-	nextIndex := s.nextIndex[peerID]
 	s.RLockLog()
+	nextIndex := int(s.nextIndexes[peerID].Load())
 	prevIndex, prevLog := s.GetLog(nextIndex - 1)
 	args := &AppendEntriesArgs{
 		Term:         s.Term(),
@@ -159,19 +168,61 @@ func (s *LeaderState) syncPeerEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 	}
 	s.RUnlockLog()
 
+	if s.closed.Load() {
+		return
+	}
+
+	Info("%s appending log[%d:%d] to peer %d", s,
+		nextIndex, nextIndex+len(args.Entries), peerID)
 	reply, ok := s.callAppendEntries(args, peerID, peerRPC)
-	if !ok {
+	if !ok || s.closed.Load() {
 		return
 	}
 
 	if reply.Success {
-		s.Lock()
-		s.nextIndex[peerID] = reply.LastLogIndex + 1
-		s.matchIndex[peerID] = reply.LastLogIndex
-		s.Unlock()
-		return
+		newMatch := int64(reply.LastLogIndex)
+		if oldMatch := s.matchIndexes[peerID].Swap(newMatch); oldMatch < newMatch {
+			Debug("%s append log[%d:%d] to peer %d successfully",
+				s, nextIndex, nextIndex+len(args.Entries), peerID)
+			s.matchCh <- matchRecord{peerID, int(newMatch)}
+		}
+	} else {
+		Debug("%s append log[%d:%d] to peer %d failed",
+			s, nextIndex, nextIndex+len(args.Entries), peerID)
 	}
 
-	// TODO: handle conflict
+	Info("%s peer %d match log at index %d", s, peerID, reply.LastLogIndex)
+	s.nextIndexes[peerID].Store(int64(reply.LastLogIndex + 1))
+	Debug("%s update peer %d next index %d => %d", s,
+		peerID, nextIndex, reply.LastLogIndex+1)
+}
 
+func (s *LeaderState) commitMatch(nPeers int) {
+	defer s.wg.Done()
+	matches := make([]int, nPeers)
+	for match := range s.matchCh {
+		s.RLockLog()
+		committed := s.Committed()
+		matches[s.Me()] = s.LastLogIndex()
+		s.RUnlockLog()
+
+		matches[match.peer] = match.index
+		majorMatch := s.majorMatch(matches)
+		if majorMatch <= committed {
+			continue
+		}
+
+		if s.CommitLog(majorMatch) {
+			Info("%s major match at log[:%d] committed", s, s.Committed())
+		}
+	}
+}
+
+func (s *LeaderState) majorMatch(match []int) int {
+	if len(match) == 0 {
+		return 0
+	}
+	matchSlice := slices.Clone(match)
+	sort.Sort(sort.Reverse(sort.IntSlice(matchSlice)))
+	return matchSlice[len(matchSlice)/2]
 }

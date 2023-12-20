@@ -178,16 +178,18 @@ func (s *BaseState) DeleteLogSince(index int) (n int) {
 }
 
 // This will acquire log lock, use go routine to avoid deadlock
-func (s *BaseState) CommitLog(index int) {
+func (s *BaseState) CommitLog(index int) (advance bool) {
 	s.LockLog()
 	defer s.UnlockLog()
 
+	advance = false
 	for s.r.commitIndex < index {
 		i, log := s.GetLog(s.r.commitIndex + 1)
 		if log == nil {
 			return
 		}
 		s.r.commitIndex++
+		advance = true
 		if i != s.r.commitIndex {
 			Fatal("%s commit index not match with log offset")
 		}
@@ -198,7 +200,7 @@ func (s *BaseState) CommitLog(index int) {
 		}
 	}
 
-	defer Info("%s log[:%d] committed", s, s.r.commitIndex)
+	return advance
 }
 
 func (s *BaseState) RequestVote(args *RequestVoteArgs) (granted bool) {
