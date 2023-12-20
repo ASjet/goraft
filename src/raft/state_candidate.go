@@ -83,9 +83,15 @@ func (s *CandidateState) electionTimeout() {
 }
 
 func (s *CandidateState) requestVote(peerID int, peerRPC *labrpc.ClientEnd) {
+	s.RLockLog()
+	lastIndex, lastLog := s.GetLog(-1)
+	s.RUnlockLog()
+
 	args := &RequestVoteArgs{
-		Term:      s.Term(),
-		Candidate: s.Me(),
+		Term:         s.Term(),
+		Candidate:    s.Me(),
+		LastLogIndex: lastIndex,
+		LastLogTerm:  lastLog.Term,
 	}
 	reply := new(RequestVoteReply)
 	Debug("%s calling peers[%d].RequestVote(%d, %d)", s, peerID,
