@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"context"
 	"slices"
 	"sort"
 	"sync"
@@ -21,6 +22,8 @@ type matchRecord struct {
 
 type LeaderState struct {
 	BaseState
+	ctx    context.Context
+	cancel context.CancelFunc
 	wg     sync.WaitGroup
 	closed atomic.Bool
 
@@ -36,8 +39,12 @@ func Leader(from State) *LeaderState {
 		panic("invalid state transition: only candidate can transition to leader")
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	ls := &LeaderState{
 		BaseState:    from.Base(from.Term(), from.Me()),
+		ctx:          ctx,
+		cancel:       cancel,
 		nextIndexes:  make([]atomic.Int64, from.Peers()),
 		matchIndexes: make([]atomic.Int64, from.Peers()),
 		matchCh:      make(chan matchRecord, from.Peers()),
@@ -84,8 +91,9 @@ func (s *LeaderState) Close() bool {
 	if !s.closed.CompareAndSwap(false, true) {
 		return false
 	}
-	close(s.matchCh)
+	s.cancel()
 	s.wg.Wait()
+	close(s.matchCh)
 	return true
 }
 
@@ -173,6 +181,7 @@ func (s *LeaderState) syncPeerEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 		if oldMatch := s.matchIndexes[peerID].Swap(newMatch); oldMatch < newMatch {
 			Debug("%s append log[%d:%d] to peer %d successfully",
 				s, nextIndex, nextIndex+len(args.Entries), peerID)
+			// FIXME: send on closed channel
 			s.matchCh <- matchRecord{peerID, int(newMatch)}
 		}
 	} else {
@@ -189,20 +198,25 @@ func (s *LeaderState) syncPeerEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 func (s *LeaderState) commitMatch(nPeers int) {
 	defer s.wg.Done()
 	matches := make([]int, nPeers)
-	for match := range s.matchCh {
-		s.RLockLog()
-		committed := s.Committed()
-		matches[s.Me()] = s.LastLogIndex()
-		s.RUnlockLog()
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case match := <-s.matchCh:
+			s.RLockLog()
+			committed := s.Committed()
+			matches[s.Me()] = s.LastLogIndex()
+			s.RUnlockLog()
 
-		matches[match.peer] = match.index
-		majorMatch := s.majorMatch(matches)
-		if majorMatch <= committed {
-			continue
-		}
+			matches[match.peer] = match.index
+			majorMatch := s.majorMatch(matches)
+			if majorMatch <= committed {
+				continue
+			}
 
-		if s.CommitLog(majorMatch) {
-			Info("%s major match at log[:%d] committed", s, s.Committed())
+			if s.CommitLog(majorMatch) {
+				Info("%s major match at log[:%d] committed", s, s.Committed())
+			}
 		}
 	}
 }
