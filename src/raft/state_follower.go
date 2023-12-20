@@ -39,6 +39,8 @@ func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 	switch s.Voted() {
 	case NoVote:
 		if !s.validRequestVote(args.LastLogIndex, args.LastLogTerm) {
+			Info("%s reject vote request from %d which is not more updated",
+				s, args.Candidate)
 			return false
 		}
 		if s.Close() {
@@ -66,7 +68,7 @@ func (s *FollowerState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	case args.Leader:
 		s.timer.Restart()
 		// If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
-		defer s.CommitLog(args.LeaderCommit)
+		defer s.tryCommit(args.LeaderCommit)
 		return s.handleEntries(args.Leader, args.PrevLogIndex, args.PrevLogTerm, args.Entries)
 	default:
 		return false
@@ -98,6 +100,20 @@ func (s *FollowerState) heartbeatTimeout() {
 	}
 }
 
+func (s *FollowerState) tryCommit(index int) {
+	s.RLockLog()
+	commitIndex := s.Committed()
+	s.RUnlockLog()
+
+	if index > commitIndex {
+		Info("%s receive higher commit index %d(current %d)",
+			s, index, commitIndex)
+		if s.CommitLog(index) {
+			Info("%s log[:%d] committed", s, s.Committed()+1)
+		}
+	}
+}
+
 // Reply false if log doesn’t contain an entry at prevLogIndex
 // whose term matches prevLogTerm (§5.3)
 func (s *FollowerState) validRequestVote(lastLogIndex, lastLogTerm int) bool {
@@ -125,35 +141,40 @@ func (s *FollowerState) validRequestVote(lastLogIndex, lastLogTerm int) bool {
 }
 
 func (s *FollowerState) handleEntries(leader, prevIndex, prevTerm int, entries []Log) bool {
-	if len(entries) == 0 {
-		Debug("%s receive heartbeat from %d", s, leader)
-		return true
-	}
-
 	s.LockLog()
 	defer s.UnlockLog()
 
 	// Reply false if log doesn’t contain an entry at prevLogIndex
 	// whose term matches prevLogTerm (§5.3)
 	if prevIndex > s.LastLogIndex() {
+		Info("%s reject logs: prev index %d is larger than last log index %d",
+			s, prevIndex, s.LastLogIndex())
 		return false
 	}
 
 	_, prevLog := s.GetLog(prevIndex)
 	if prevLog == nil {
-		// The previous log entry is already trimmed
+		Info("%s reject logs: prev index %d is already trimmed", s, prevIndex)
 		return false
 	}
 
 	// If an existing entry conflicts with a new one (same index but different terms),
 	// delete the existing entry and all that follow it (§5.3)
 	if prevLog.Term != prevTerm {
+		Info("%s reject logs: prev term %d at index %d is conflict with %d", s,
+			prevTerm, prevIndex, prevLog.Term)
 		s.DeleteLogSince(prevIndex)
+		Debug("%s delete log since index %d", s, prevIndex)
 		return false
 	}
 
-	// Append any new entries not already in the log
-	s.AppendLogs(entries...)
+	s.DeleteLogSince(prevIndex + 1)
+
+	if len(entries) > 0 {
+		// Append any new entries not already in the log
+		s.AppendLogs(entries...)
+		Info("%s append new log[%d:%d]", s, prevIndex+1, prevIndex+1+len(entries))
+	}
 
 	return true
 }
