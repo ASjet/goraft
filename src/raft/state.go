@@ -43,10 +43,14 @@ type State interface {
 // logPrefix always access the state's immutable fields
 func logPrefix(s State) string {
 	vote := s.Voted()
-	if vote == NoVote {
-		return fmt.Sprintf("%d>n:%s%03d:%02d@%02d", s.Me(), s.Role(), s.Term(), s.LastLogIndex(), s.Committed())
+	switch vote {
+	case NoVote:
+		return fmt.Sprintf("%d>N:%s%03d:%02d@%02d", s.Me(), s.Role(), s.Term(), s.LastLogIndex(), s.Committed())
+	case s.Me():
+		return fmt.Sprintf("%d>S:%s%03d:%02d@%02d", s.Me(), s.Role(), s.Term(), s.LastLogIndex(), s.Committed())
+	default:
+		return fmt.Sprintf("%d>%d:%s%03d:%02d@%02d", s.Me(), s.Voted(), s.Role(), s.Term(), s.LastLogIndex(), s.Committed())
 	}
-	return fmt.Sprintf("%d>%d:%s%03d:%02d@%02d", s.Me(), s.Voted(), s.Role(), s.Term(), s.LastLogIndex(), s.Committed())
 }
 
 // Immutable basic raft states
@@ -191,7 +195,8 @@ func (s *BaseState) CommitLog(index int) (advance bool) {
 		s.r.commitIndex++
 		advance = true
 		if i != s.r.commitIndex {
-			Fatal("%s commit index not match with log offset")
+			Fatal("%d commit index %d not match with log offset %d", s.Me(),
+				s.r.commitIndex, s.r.logIndexOffset)
 		}
 		s.r.applyCh <- ApplyMsg{
 			CommandValid: true,

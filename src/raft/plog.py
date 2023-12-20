@@ -10,7 +10,7 @@ ptn = re.compile(
     r"^(\d{2}:\d{2}:\d{2}.\d{6})\s+\[(\w+)\](\d+)>(\w+):(\w{1})(\d+):(\d+)@(\d+)\s+(.*)$"
 )
 
-NO_VOTE = "n"
+NO_VOTE = "N"
 FOLLOWER = "F"
 CANDIDATE = "C"
 LEADER = "L"
