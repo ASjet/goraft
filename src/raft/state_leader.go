@@ -130,7 +130,7 @@ func (s *LeaderState) sendHeartbeats() {
 
 	for !s.closed.Load() {
 		Info("%s sending heartbeats", s)
-		s.PollPeers(s.sendHeartbeat)
+		s.PollPeers(s.syncPeerEntries)
 		// We won't wait all peers to respond here
 
 		if s.closed.Load() {
@@ -141,17 +141,6 @@ func (s *LeaderState) sendHeartbeats() {
 		Info("%s waiting for next heartbeats", s)
 		time.Sleep(HeartBeatInterval)
 	}
-}
-
-func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
-	s.RLockLog()
-	args := &AppendEntriesArgs{
-		Term:         s.Term(),
-		Leader:       s.Me(),
-		LeaderCommit: s.Committed(),
-	}
-	s.RUnlockLog()
-	s.callAppendEntries(args, peerID, peerRPC)
 }
 
 func (s *LeaderState) syncPeerEntries(peerID int, peerRPC *labrpc.ClientEnd) {
