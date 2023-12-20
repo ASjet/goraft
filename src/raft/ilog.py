@@ -12,6 +12,7 @@ class PeerStat:
         self.vote = ""
         self.role = ""
         self.log = ""
+        self.log_index = ""
         self.updated = False
 
 
@@ -39,7 +40,7 @@ def print_stat(screen: ScreenContext, stats: dict[int, PeerStat], ts: str):
 
     table.add_row(*(["Term"] + list(map(lambda x: x.term, stats.values()))))
     table.add_row(*(["Role"] + list(map(lambda x: x.role, stats.values()))))
-    table.add_row(*(["Vote"] + list(map(lambda x: x.vote, stats.values()))))
+    table.add_row(*(["Commit/Append"] + list(map(lambda x: x.log_index, stats.values()))))
     table.add_row(*(["Log"] + list(map(lambda x: x.log, stats.values()))))
 
     if len(stat_history) == 2:
@@ -72,27 +73,40 @@ if __name__ == "__main__":
                 if not match:
                     continue
 
-                ts, _level, pid, vote, role, term, log = parse_groups(match)
+                state = parse_groups(match)
 
-                if vote == NO_VOTE:
-                    vote = "No Vote"
-                elif int(vote) == pid:
-                    vote = "Self"
+                if state.role == FOLLOWER:
+                    if state.vote == NO_VOTE:
+                        state.role = f"{ROLE_NAME_MAP[state.role]} without leader"
+                    else:
+                        state.role = f"Following {state.vote}"
                 else:
-                    vote = f"Peer {vote}"
+                    state.role = ROLE_NAME_MAP[state.role]
 
-                peer_stats[pid].term = str(term)
-                peer_stats[pid].vote = vote
-                peer_stats[pid].role = ROLE_NAME_MAP[role]
-                peer_stats[pid].log = f"[{_level[0]}]" + log
-                peer_stats[pid].updated = True
+                if state.vote == NO_VOTE:
+                    state.vote = "No Vote"
+                elif int(state.vote) == state.pid:
+                    state.vote = "Self"
+                else:
+                    state.vote = f"Peer {state.vote}"
 
-                print_stat(screen, peer_stats, ts)
 
-                if target_ts is not None and ts == target_ts:
+                peer_stats[state.pid].term = state.term
+                peer_stats[state.pid].vote = state.vote
+                peer_stats[state.pid].role = state.role
+                peer_stats[state.pid].log_index = f"{state.commit_log} / {state.last_log}"
+                peer_stats[state.pid].log = f"[{state.log_level[0]}]" + state.log
+                peer_stats[state.pid].updated = True
+
+                print_stat(screen, peer_stats, state.ts)
+
+                if target_ts is not None and state.ts == target_ts:
                     # Skip prompt until we reach the target timestamp
                     interactive = True
 
-                if interactive:
-                    console.input()
+                try:
+                    if interactive:
+                        console.input()
+                except:
+                    sys.exit(0)
             console.input("Press any key to exit...")

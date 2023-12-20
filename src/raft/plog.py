@@ -15,6 +15,18 @@ FOLLOWER = "F"
 CANDIDATE = "C"
 LEADER = "L"
 
+class State:
+    def __init__(self, groups: tuple[str,...]):
+        assert len(groups) == 9
+        self.ts = groups[0]
+        self.log_level = groups[1]
+        self.pid = int(groups[2])
+        self.vote = groups[3]
+        self.role = groups[4]
+        self.term = str(int(groups[5]))
+        self.last_log = str(int(groups[6]))
+        self.commit_log = str(int(groups[7]))
+        self.log = groups[8]
 
 def mk_row(pid: int, n_peers: int, log: str) -> list[str]:
     result = ["" for _ in range(n_peers)]
@@ -31,9 +43,8 @@ def get_peers(stream: TextIO = sys.stdin) -> tuple[int, str]:
         n_peers += 1
 
 
-def parse_groups(match: re.Match[str]) -> tuple[str, str, int, str, str, str, str]:
-    time, level, _pid, vote, role, term, _logs, _commit, log = match.groups()
-    return time, level, int(_pid), vote, role, term, log
+def parse_groups(match: re.Match[str]) -> State:
+    return State(match.groups())
 
 def read_one(stream: TextIO = sys.stdin) -> bool:
     n_peers, title = get_peers(stream)
@@ -47,6 +58,8 @@ def read_one(stream: TextIO = sys.stdin) -> bool:
     table.add_column("R", justify="center", no_wrap=True)  # Role
     table.add_column("V", justify="center", no_wrap=True)  # Term
     table.add_column("T", justify="center", no_wrap=True)  # Term
+    table.add_column("L", justify="center", no_wrap=True)  # Term
+    table.add_column("C", justify="center", no_wrap=True)  # Term
     for _ in range(n_peers):
         table.add_column(f"Peer {_}", justify="left", no_wrap=False)
 
@@ -59,17 +72,17 @@ def read_one(stream: TextIO = sys.stdin) -> bool:
         match = ptn.match(line)
         if not match:
             continue
-        _ts, _level, pid, vote, role, term, log = parse_groups(match)
+        state = parse_groups(match)
 
-        if last_peer is not pid:
-            last_peer = pid
+        if last_peer is not state.pid:
+            last_peer = state.pid
             table.add_section()
 
-        if role == LEADER and last_leader is not pid:
-            last_leader = pid
+        if state.role == LEADER and last_leader is not state.pid:
+            last_leader = state.pid
             table.add_section()
 
-        rows = [role, vote, term] + mk_row(pid, n_peers, log)
+        rows = [state.role, state.vote, state.term, state.last_log, state.commit_log] + mk_row(state.pid, n_peers, state.log)
         table.add_row(*rows)
     console = Console()
     console.print(table)
