@@ -26,7 +26,7 @@ ROLE_NAME_MAP = {
 stat_history: list[Table] = []
 
 
-def print_stat(screen: ScreenContext, stats: dict[int, PeerStat], ts: str):
+def print_stat(screen: ScreenContext, stats: dict[int, PeerStat], ts: str, print: bool = True):
     table = Table(title="Raft Status", show_lines=True, highlight=True)
     table.add_column(ts, justify="right", no_wrap=True)  # Status
     for index, stat in stats.items():
@@ -48,7 +48,8 @@ def print_stat(screen: ScreenContext, stats: dict[int, PeerStat], ts: str):
     stat_history.append(table)
     stat_history[0].title = "Previous Status"
     stat_history[-1].title = "Current Status"
-    screen.update(*stat_history)
+    if print:
+        screen.update(*stat_history)
 
 
 if __name__ == "__main__":
@@ -98,11 +99,12 @@ if __name__ == "__main__":
                 peer_stats[state.pid].log = f"[{state.log_level[0]}]" + state.log
                 peer_stats[state.pid].updated = True
 
-                print_stat(screen, peer_stats, state.ts)
 
                 if target_ts is not None and state.ts == target_ts:
                     # Skip prompt until we reach the target timestamp
                     interactive = True
+
+                print_stat(screen, peer_stats, state.ts, interactive)
 
                 try:
                     if interactive:
