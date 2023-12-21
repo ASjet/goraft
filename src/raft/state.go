@@ -45,11 +45,11 @@ func logPrefix(s State) string {
 	vote := s.Voted()
 	switch vote {
 	case NoVote:
-		return fmt.Sprintf("%d>N:%s%03d:%02d@%02d", s.Me(), s.Role(), s.Term(), s.LastLogIndex(), s.Committed())
+		return fmt.Sprintf("%d>N:%s%03d:%02d/%02d", s.Me(), s.Role(), s.Term(), s.Committed(), s.LastLogIndex())
 	case s.Me():
-		return fmt.Sprintf("%d>S:%s%03d:%02d@%02d", s.Me(), s.Role(), s.Term(), s.LastLogIndex(), s.Committed())
+		return fmt.Sprintf("%d>S:%s%03d:%02d/%02d", s.Me(), s.Role(), s.Term(), s.Committed(), s.LastLogIndex())
 	default:
-		return fmt.Sprintf("%d>%d:%s%03d:%02d@%02d", s.Me(), s.Voted(), s.Role(), s.Term(), s.LastLogIndex(), s.Committed())
+		return fmt.Sprintf("%d>%d:%s%03d:%02d/%02d", s.Me(), s.Voted(), s.Role(), s.Term(), s.Committed(), s.LastLogIndex())
 	}
 }
 
