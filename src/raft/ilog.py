@@ -3,7 +3,7 @@ import sys
 from rich.console import Console, ScreenContext
 from rich.table import Table
 
-from plog import ptn, get_peers, parse_groups, NO_VOTE, FOLLOWER, CANDIDATE, LEADER
+from plog import ptn, get_peers, parse_groups, NO_VOTE, FOLLOWER, CANDIDATE, LEADER, SELF_VOTE
 
 
 class PeerStat:
@@ -85,7 +85,7 @@ if __name__ == "__main__":
 
                 if state.vote == NO_VOTE:
                     state.vote = "No Vote"
-                elif int(state.vote) == state.pid:
+                elif state.vote == SELF_VOTE:
                     state.vote = "Self"
                 else:
                     state.vote = f"Peer {state.vote}"

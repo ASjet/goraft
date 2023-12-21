@@ -14,6 +14,7 @@ NO_VOTE = "N"
 FOLLOWER = "F"
 CANDIDATE = "C"
 LEADER = "L"
+SELF_VOTE = "S"
 
 class State:
     def __init__(self, groups: tuple[str,...]):
