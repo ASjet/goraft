@@ -49,7 +49,7 @@ func Leader(from State) *LeaderState {
 		matchIndexes: make([]atomic.Int64, from.Peers()),
 		matchCh:      make(chan matchRecord, from.Peers()),
 	}
-	nextIndex := int64(ls.LastLogIndex() + 1)
+	nextIndex := int64(ls.Committed() + 1)
 	for i := range ls.nextIndexes {
 		ls.nextIndexes[i].Store(nextIndex)
 	}
@@ -183,13 +183,13 @@ func (s *LeaderState) syncPeerEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 				s, nextIndex, nextIndex+len(args.Entries), peerID)
 			// FIXME: send on closed channel
 			s.matchCh <- matchRecord{peerID, int(newMatch)}
+			Info("%s peer %d match log at index %d", s, peerID, newMatch)
 		}
 	} else {
 		Debug("%s append log[%d:%d] to peer %d failed",
 			s, nextIndex, nextIndex+len(args.Entries), peerID)
 	}
 
-	Info("%s peer %d match log at index %d", s, peerID, reply.LastLogIndex)
 	s.nextIndexes[peerID].Store(int64(reply.LastLogIndex + 1))
 	Debug("%s update peer %d next index %d => %d", s,
 		peerID, nextIndex, reply.LastLogIndex+1)
