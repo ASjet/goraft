@@ -55,9 +55,10 @@ func Leader(from State) *LeaderState {
 	}
 	Info("%s new leader", ls)
 
-	ls.wg.Add(2)
+	ls.wg.Add(2 + ls.Peers() - 1)
 	go ls.sendHeartbeats()
 	go ls.commitMatch(from.Peers())
+	ls.PollPeers(ls.syncPeerEntries)
 
 	return ls
 }
@@ -81,9 +82,8 @@ func (s *LeaderState) AppendCommand(command interface{}) (index int, term int) {
 		Data: command,
 	})
 	s.UnlockLog()
-	Info("%s append new command %v to index %d", s, command, index)
-	s.PollPeers(s.syncPeerEntries)
-	Info("%s sync entries to peers", s)
+	Info("%s append new command %v to index %d, signal syncing to peers", s, command, index)
+	s.BroadcastLog()
 	return
 }
 
@@ -92,6 +92,7 @@ func (s *LeaderState) Close() bool {
 		return false
 	}
 	s.cancel()
+	s.BroadcastLog()
 	s.wg.Wait()
 	close(s.matchCh)
 	return true
@@ -138,7 +139,7 @@ func (s *LeaderState) sendHeartbeats() {
 
 	for !s.closed.Load() {
 		Info("%s sending heartbeats", s)
-		s.PollPeers(s.syncPeerEntries)
+		s.PollPeers(s.sendHeartbeat)
 		// We won't wait all peers to respond here
 
 		if s.closed.Load() {
@@ -151,7 +152,75 @@ func (s *LeaderState) sendHeartbeats() {
 	}
 }
 
+func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
+	s.RLockLog()
+	nextIndex := int(s.nextIndexes[peerID].Load())
+	prevIndex, prevLog := s.GetLog(nextIndex - 1)
+	args := &AppendEntriesArgs{
+		Term:         s.Term(),
+		Leader:       s.Me(),
+		PrevLogIndex: prevIndex,
+		PrevLogTerm:  prevLog.Term,
+		LeaderCommit: s.Committed(),
+	}
+	s.RUnlockLog()
+
+	if s.closed.Load() {
+		return
+	}
+
+	Debug("%s sending heartbeat to peer %d", s, peerID)
+	reply, ok := s.callAppendEntries(args, peerID, peerRPC)
+	if !ok || s.closed.Load() {
+		return
+	}
+
+	if reply.Success {
+		newMatch := int64(reply.LastLogIndex)
+		if oldMatch := s.matchIndexes[peerID].Swap(newMatch); oldMatch < newMatch {
+			s.matchCh <- matchRecord{peerID, int(newMatch)}
+			Info("%s peer %d match log at index %d", s, peerID, newMatch)
+		}
+	}
+
+	peerNextIndex := reply.LastLogIndex + 1
+	s.nextIndexes[peerID].Store(int64(peerNextIndex))
+	Debug("%s update peer %d next index %d => %d", s,
+		peerID, nextIndex, reply.LastLogIndex+1)
+
+	s.RLockLog()
+	lastLogIndex := s.LastLogIndex()
+	s.RUnlockLog()
+	if peerNextIndex <= lastLogIndex {
+		Info("%s peer %d is lagging behind, signal to sync", s, peerID)
+		s.BroadcastLog()
+	}
+}
+
 func (s *LeaderState) syncPeerEntries(peerID int, peerRPC *labrpc.ClientEnd) {
+	defer s.wg.Done()
+	for !s.closed.Load() {
+		s.RLockLog()
+		nextIndex := int(s.nextIndexes[peerID].Load())
+		matchIndex := int(s.matchIndexes[peerID].Load())
+		if nextIndex == matchIndex+1 && nextIndex > s.LastLogIndex() {
+			// There is no new entry to sync, wait on a condition variable
+			Info("%s waiting for new entries for peer %d", s, peerID)
+			s.WaitLog()
+			s.RUnlockLog()
+			continue
+		}
+		s.RUnlockLog()
+
+		if s.closed.Load() {
+			return
+		}
+
+		s.sendEntries(peerID, peerRPC)
+	}
+}
+
+func (s *LeaderState) sendEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 	s.RLockLog()
 	nextIndex := int(s.nextIndexes[peerID].Load())
 	prevIndex, prevLog := s.GetLog(nextIndex - 1)

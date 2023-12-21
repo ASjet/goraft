@@ -173,7 +173,6 @@ func (s *FollowerState) handleEntries(leader, prevIndex, prevTerm int, entries [
 		return false
 	}
 
-	// FIXME: this will cause early AppendEntries to delete latter AppendEntries
 	s.DeleteLogSince(prevIndex + 1)
 
 	if len(entries) > 0 {

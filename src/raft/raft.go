@@ -69,10 +69,10 @@ type Raft struct {
 	stateMu sync.Mutex
 	state   State
 
-	logMu          sync.RWMutex // Must hold this lock when accessing following fields
-	logIndexOffset int          // The index of the first log entry in logs
-	logs           []Log        // The actually log entries, the first elem is a dummy entry
-	commitIndex    int          // The index of highest log entry known to be committed
+	logCond        *sync.Cond // Must hold this lock when accessing following fields
+	logIndexOffset int        // The index of the first log entry in logs
+	logs           []Log      // The actually log entries, the first elem is a dummy entry
+	commitIndex    int        // The index of highest log entry known to be committed
 }
 
 // return currentTerm and whether this server
@@ -192,12 +192,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	reply.Success = rf.state.AppendEntries(args)
-	rf.logMu.RLock()
-	reply.LastLogIndex = rf.state.LastLogIndex()
-	if logs := len(rf.logs); logs > 0 {
-		reply.LastLogTerm = rf.logs[logs-1].Term
+	rf.logCond.L.Lock()
+	index, log := rf.state.GetLog(-1)
+	if log != nil {
+		reply.LastLogIndex, reply.LastLogTerm = index, log.Term
 	}
-	rf.logMu.RUnlock()
+	rf.logCond.L.Unlock()
 }
 
 // the service using Raft (e.g. a k/v server) wants to start
@@ -266,6 +266,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.me = me
 	rf.logs = []Log{{0, nil}}
 	rf.applyCh = applyCh
+	rf.logCond = sync.NewCond(new(sync.Mutex))
 
 	// Your initialization code here (2A, 2B, 2C).
 

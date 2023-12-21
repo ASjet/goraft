@@ -28,6 +28,7 @@ type State interface {
 	String() string
 	LastLogIndex() int
 	Committed() int
+	GetLog(index int) (int, *Log)
 
 	To(state State) (newState State)
 	Close() (success bool)
@@ -151,19 +152,27 @@ func (s *BaseState) Unlock() {
 }
 
 func (s *BaseState) RLockLog() {
-	s.r.logMu.RLock()
+	s.r.logCond.L.Lock()
 }
 
 func (s *BaseState) RUnlockLog() {
-	s.r.logMu.RUnlock()
+	s.r.logCond.L.Unlock()
 }
 
 func (s *BaseState) LockLog() {
-	s.r.logMu.Lock()
+	s.r.logCond.L.Lock()
 }
 
 func (s *BaseState) UnlockLog() {
-	s.r.logMu.Unlock()
+	s.r.logCond.L.Unlock()
+}
+
+func (s *BaseState) WaitLog() {
+	s.r.logCond.Wait()
+}
+
+func (s *BaseState) BroadcastLog() {
+	s.r.logCond.Broadcast()
 }
 
 func (s *BaseState) AppendLogs(logs ...Log) (index int) {
