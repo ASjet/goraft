@@ -39,7 +39,7 @@ func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 	switch s.Voted() {
 	case NoVote:
 		if !s.validRequestVote(args.LastLogIndex, args.LastLogTerm) {
-			Info("%s reject vote request from %d which is not more updated",
+			Info("%s reject vote request from %d: candidate is not more updated",
 				s, args.Candidate)
 			return false
 		}
@@ -52,6 +52,8 @@ func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 		s.timer.Restart()
 		return true
 	default:
+		Info("%s reject vote request from %d: already voted other candidate",
+			s, args.Candidate)
 		return false
 	}
 }
@@ -68,8 +70,11 @@ func (s *FollowerState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	case args.Leader:
 		s.timer.Restart()
 		// If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
-		defer s.tryCommit(args.LeaderCommit)
-		return s.handleEntries(args.Leader, args.PrevLogIndex, args.PrevLogTerm, args.Entries)
+		if s.handleEntries(args.Leader, args.PrevLogIndex, args.PrevLogTerm, args.Entries) {
+			s.tryCommit(args.LeaderCommit)
+			return true
+		}
+		return false
 	default:
 		return false
 	}
@@ -164,10 +169,11 @@ func (s *FollowerState) handleEntries(leader, prevIndex, prevTerm int, entries [
 		Info("%s reject logs: prev term %d at index %d is conflict with %d", s,
 			prevTerm, prevIndex, prevLog.Term)
 		s.DeleteLogSince(prevIndex)
-		Debug("%s delete log since index %d", s, prevIndex)
+		Info("%s delete log since index %d", s, prevIndex)
 		return false
 	}
 
+	// FIXME: this will cause early AppendEntries to delete latter AppendEntries
 	s.DeleteLogSince(prevIndex + 1)
 
 	if len(entries) > 0 {
