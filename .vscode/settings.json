@@ -1,0 +1,9 @@
+{
+    "cSpell.words": [
+    ],
+    "go.testFlags": [
+        "-tags=debug",
+        "-count=1",
+        "-timeout=120s",
+    ]
+}
