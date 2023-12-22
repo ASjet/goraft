@@ -164,6 +164,7 @@ func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
 		Leader:       s.Me(),
 		PrevLogIndex: prevIndex,
 		PrevLogTerm:  prevLog.Term,
+		Entries:      s.GetLogSince(nextIndex),
 		LeaderCommit: s.Committed(),
 	}
 	s.RUnlockLog()
@@ -172,7 +173,8 @@ func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
 		return
 	}
 
-	Debug("%s sending heartbeat to peer %d", s, peerID)
+	Debug("%s sending heartbeat with log[%d:%d] to peer %d", s,
+		nextIndex, nextIndex+len(args.Entries), peerID)
 	reply, ok := s.callAppendEntries(args, peerID, peerRPC)
 	if !ok || s.closed.Load() {
 		return
@@ -186,10 +188,8 @@ func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
 		}
 	}
 
-	peerNextIndex := reply.LastLogIndex + 1
-	s.nextIndexes[peerID].Store(int64(peerNextIndex))
-	Debug("%s update peer %d next index %d => %d", s,
-		peerID, nextIndex, reply.LastLogIndex+1)
+	peerNextIndex := s.updateNext(peerID, args.PrevLogIndex,
+		reply.LastLogIndex, reply.LastLogTerm)
 
 	s.RLockLog()
 	lastLogIndex := s.LastLogIndex()
@@ -265,9 +265,7 @@ func (s *LeaderState) sendEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 			s, nextIndex, nextIndex+len(args.Entries), peerID)
 	}
 
-	s.nextIndexes[peerID].Store(int64(reply.LastLogIndex + 1))
-	Debug("%s update peer %d next index %d => %d", s,
-		peerID, nextIndex, reply.LastLogIndex+1)
+	s.updateNext(peerID, args.PrevLogIndex, reply.LastLogIndex, reply.LastLogTerm)
 }
 
 func (s *LeaderState) commitMatch(nPeers int) {
@@ -305,4 +303,22 @@ func (s *LeaderState) majorMatch(match []int) int {
 	matchSlice := slices.Clone(match)
 	sort.Sort(sort.Reverse(sort.IntSlice(matchSlice)))
 	return matchSlice[len(matchSlice)/2]
+}
+
+func (s *LeaderState) updateNext(peerID, prevIndex, lastIndex, lastTerm int) int {
+	nextIndex := lastIndex + 1
+	if lastIndex == prevIndex-1 {
+		// There is a conflict
+		s.RLockLog()
+		termIndex, termLog := s.FirstLogAtTerm(lastTerm)
+		s.RUnlockLog()
+		if termLog != nil {
+			nextIndex = termIndex
+			Info("%s peer %d has conflict at log[%d], retry from log[%d]",
+				s, peerID, prevIndex, termIndex)
+		}
+	}
+	oldNext := s.nextIndexes[peerID].Swap(int64(nextIndex))
+	Debug("%s update peer %d next index %d => %d", s, peerID, oldNext, nextIndex)
+	return nextIndex
 }

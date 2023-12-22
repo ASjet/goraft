@@ -128,6 +128,15 @@ func (s *BaseState) GetLogSince(index int) []Log {
 	return s.r.logs[index:]
 }
 
+func (s *BaseState) FirstLogAtTerm(term int) (int, *Log) {
+	for i := 0; i < len(s.r.logs); i++ {
+		if s.r.logs[i].Term == term {
+			return s.r.logIndexOffset + i, &s.r.logs[i]
+		}
+	}
+	return 0, nil
+}
+
 func (s *BaseState) Committed() int {
 	return s.r.commitIndex
 }
