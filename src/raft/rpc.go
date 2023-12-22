@@ -12,12 +12,21 @@ type RequestVoteArgs struct {
 	LastLogTerm  int
 }
 
+func (s *RequestVoteArgs) String() string {
+	return fmt.Sprintf("T:%d,C:%d,LI:%d,LT:%d",
+		s.Term, s.Candidate, s.LastLogIndex, s.LastLogTerm)
+}
+
 // example RequestVote RPC reply structure.
 // field names must start with capital letters!
 type RequestVoteReply struct {
 	// Your data here (2A).
 	Term    int
 	Granted bool
+}
+
+func (s *RequestVoteReply) String() string {
+	return fmt.Sprintf("T:%d,G:%v", s.Term, s.Granted)
 }
 
 type AppendEntriesArgs struct {

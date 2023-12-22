@@ -94,17 +94,14 @@ func (s *CandidateState) requestVote(peerID int, peerRPC *labrpc.ClientEnd) {
 		LastLogTerm:  lastLog.Term,
 	}
 	reply := new(RequestVoteReply)
-	Debug("%s calling peers[%d].RequestVote(%d, %d)", s, peerID,
-		args.Term, args.Candidate)
+	Debug("%s calling peers[%d].RequestVote(%s)", s, peerID, args)
 	if !peerRPC.Call("Raft.RequestVote", args, reply) || s.closed.Load() {
 		if !s.closed.Load() {
-			Error("%s peers[%d].RequestVote(%d, %d) failed", s, peerID,
-				args.Term, args.Candidate)
+			Error("%s peers[%d].RequestVote(%s) failed", s, peerID, args)
 		}
 		return
 	}
-	Debug("%s peers[%d].RequestVote(%d, %d) => (%d, %v)", s, peerID,
-		args.Term, args.Candidate, reply.Term, reply.Granted)
+	Debug("%s peers[%d].RequestVote(%s) => (%s)", s, peerID, args, reply)
 
 	if reply.Granted {
 		s.votesMu.Lock()
