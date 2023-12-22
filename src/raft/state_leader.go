@@ -55,7 +55,7 @@ func Leader(from State) *LeaderState {
 	}
 	Info("%s new leader", ls)
 
-	ls.wg.Add(2 + ls.Peers() - 1)
+	ls.wg.Add(2)
 	go ls.sendHeartbeats()
 	go ls.commitMatch(from.Peers())
 	ls.PollPeers(ls.syncPeerEntries)
@@ -201,7 +201,6 @@ func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
 }
 
 func (s *LeaderState) syncPeerEntries(peerID int, peerRPC *labrpc.ClientEnd) {
-	defer s.wg.Done()
 	defer Info("%s syncPeerEntries to %d exited", s, peerID)
 	Info("%s start syncPeerEntries to %d", s, peerID)
 	for !s.closed.Load() {
@@ -221,6 +220,8 @@ func (s *LeaderState) syncPeerEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 			return
 		}
 
+		// NOTE: The test may make this function not return,
+		// so we cannot use wg to wait this goroutine
 		s.sendEntries(peerID, peerRPC)
 	}
 }
