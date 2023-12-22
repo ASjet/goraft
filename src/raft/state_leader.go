@@ -91,10 +91,12 @@ func (s *LeaderState) Close() bool {
 	if !s.closed.CompareAndSwap(false, true) {
 		return false
 	}
+	Info("%s closing", s)
 	s.cancel()
 	s.BroadcastLog()
 	s.wg.Wait()
 	close(s.matchCh)
+	Info("%s closed", s)
 	return true
 }
 
@@ -135,6 +137,7 @@ func (s *LeaderState) callAppendEntries(args *AppendEntriesArgs, peerID int,
 
 func (s *LeaderState) sendHeartbeats() {
 	defer s.wg.Done()
+	defer Info("%s sendHeartbeats exited", s)
 	Info("%s start send heartbeats", s)
 
 	for !s.closed.Load() {
@@ -199,6 +202,8 @@ func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
 
 func (s *LeaderState) syncPeerEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 	defer s.wg.Done()
+	defer Info("%s syncPeerEntries to %d exited", s, peerID)
+	Info("%s start syncPeerEntries to %d", s, peerID)
 	for !s.closed.Load() {
 		s.RLockLog()
 		nextIndex := int(s.nextIndexes[peerID].Load())
@@ -266,6 +271,8 @@ func (s *LeaderState) sendEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 
 func (s *LeaderState) commitMatch(nPeers int) {
 	defer s.wg.Done()
+	defer Info("%s commitMatch exited", s)
+	Info("%s start commit match indexes", s)
 	matches := make([]int, nPeers)
 	for {
 		select {

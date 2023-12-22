@@ -84,7 +84,9 @@ func (s *FollowerState) Close() bool {
 	if !s.closed.CompareAndSwap(false, true) {
 		return false
 	}
+	Info("%s closing", s)
 	s.timer.Stop()
+	Info("%s closed", s)
 	return true
 }
 

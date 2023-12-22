@@ -60,8 +60,10 @@ func (s *CandidateState) Close() bool {
 	if !s.closed.CompareAndSwap(false, true) {
 		return false
 	}
+	Info("%s closing", s)
 	s.timer.Stop()
 	s.wg.Wait()
+	Info("%s closed", s)
 	return true
 }
 
@@ -130,6 +132,7 @@ func (s *CandidateState) requestVote(peerID int, peerRPC *labrpc.ClientEnd) {
 
 func (s *CandidateState) startElection() {
 	defer s.wg.Done()
+	defer Info("%s election loop exited", s)
 	Info("%s start election", s)
 	for !s.closed.Load() {
 		Info("%s sending vote requests", s)
