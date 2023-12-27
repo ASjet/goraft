@@ -148,6 +148,7 @@ func (s *BaseState) LogOffset() int {
 // Setters
 
 func (s *BaseState) To(state State) State {
+	defer s.r.persist()
 	s.r.state = state
 	return state
 }
@@ -186,6 +187,9 @@ func (s *BaseState) BroadcastLog() {
 
 func (s *BaseState) AppendLogs(logs ...Log) (index int) {
 	s.r.logs = append(s.r.logs, logs...)
+	if len(logs) > 0 {
+		s.r.persist()
+	}
 	return s.LastLogIndex()
 }
 
@@ -196,6 +200,9 @@ func (s *BaseState) DeleteLogSince(index int) (n int) {
 	}
 	deleted := s.r.logs[index:]
 	s.r.logs = s.r.logs[:index]
+	if len(deleted) > 0 {
+		s.r.persist()
+	}
 	return len(deleted)
 }
 
@@ -221,6 +228,10 @@ func (s *BaseState) CommitLog(index int) (advance bool) {
 			Command:      log.Data,
 			CommandIndex: i,
 		}
+	}
+
+	if advance {
+		s.r.persist()
 	}
 
 	return advance

@@ -18,9 +18,11 @@ package raft
 //
 
 import (
+	"bytes"
 	"sync"
 	"sync/atomic"
 
+	"goraft/src/labgob"
 	"goraft/src/labrpc"
 )
 
@@ -48,6 +50,12 @@ type ApplyMsg struct {
 type Log struct {
 	Term int
 	Data interface{}
+}
+
+type persistState struct {
+	Term int
+	Vote int
+	Logs []Log
 }
 
 // A Go object implementing a single Raft peer.
@@ -89,33 +97,42 @@ func (rf *Raft) GetState() (int, bool) {
 // see paper's Figure 2 for a description of what should be persistent.
 func (rf *Raft) persist() {
 	// Your code here (2C).
-	// Example:
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// data := w.Bytes()
-	// rf.persister.SaveRaftState(data)
+	ps := &persistState{
+		Term: rf.state.Term(),
+		Vote: rf.state.Voted(),
+		Logs: rf.logs,
+	}
+	buf := new(bytes.Buffer)
+	if err := labgob.NewEncoder(buf).Encode(ps); err != nil {
+		Fatal("Persist state failed: %s", err)
+		return
+	}
+	rf.persister.SaveRaftState(buf.Bytes())
 }
 
 // restore previously persisted state.
 func (rf *Raft) readPersist(data []byte) {
 	if data == nil || len(data) < 1 { // bootstrap without any state?
+		rf.stateMu.Lock()
+		rf.state = Follower(0, NoVote, Base(rf))
+		rf.stateMu.Unlock()
 		return
 	}
 	// Your code here (2C).
-	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
+	ps := new(persistState)
+	if err := labgob.NewDecoder(bytes.NewBuffer(data)).Decode(ps); err != nil {
+		rf.stateMu.Lock()
+		rf.state = Follower(0, NoVote, Base(rf))
+		rf.stateMu.Unlock()
+		return
+	}
+
+	rf.stateMu.Lock()
+	rf.logCond.L.Lock()
+	rf.state = Follower(ps.Term, ps.Vote, Base(rf))
+	rf.logs = ps.Logs
+	rf.logCond.L.Unlock()
+	rf.stateMu.Unlock()
 }
 
 // A service wants to switch to snapshot.  Only do so if Raft hasn't
@@ -272,10 +289,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
-
-	rf.stateMu.Lock()
-	rf.state = Follower(0, NoVote, Base(rf))
-	rf.stateMu.Unlock()
 
 	return rf
 }
