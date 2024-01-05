@@ -223,11 +223,13 @@ func (s *BaseState) CommitLog(index int) (advance bool) {
 			Fatal("%d commit index %d not match with log offset %d", s.Me(),
 				s.r.commitIndex, s.r.logIndexOffset)
 		}
+		s.UnlockLog()
 		s.r.applyCh <- ApplyMsg{
 			CommandValid: true,
 			Command:      log.Data,
 			CommandIndex: i,
 		}
+		s.LockLog()
 	}
 
 	if advance {
