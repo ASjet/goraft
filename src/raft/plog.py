@@ -5,9 +5,9 @@ from typing import TextIO
 from rich.console import Console
 from rich.table import Table
 
-# hh:mm:ss.(us) [$LEVEL{4}]$ID{1}>$VOTED{1}:$ROLE{1}$TERM{2}:$LOGS@$COMMIT ${LOG}
+# hh:mm:ss.(us) [$LEVEL{4}]$ID{1}>$VOTED{1}:$ROLE{1}$TERM{2}:$SNAPSHOT/$COMMIT/$APPEND ${LOG}
 ptn = re.compile(
-    r"^(\d{2}:\d{2}:\d{2}.\d{6})\s+\[(\w+)\](\d+)>(\w+):(\w{1})(\d+):(\d+)/(\d+)\s+(.*)$"
+    r"^(\d{2}:\d{2}:\d{2}.\d{6})\s+\[(\w+)\](\d+)>(\w+):(\w{1})(\d+):(\d+)/(\d+)/(\d+)\s+(.*)$"
 )
 
 NO_VOTE = "N"
@@ -18,16 +18,17 @@ SELF_VOTE = "S"
 
 class State:
     def __init__(self, groups: tuple[str,...]):
-        assert len(groups) == 9
+        assert len(groups) == 10
         self.ts = groups[0]
         self.log_level = groups[1]
         self.pid = int(groups[2])
         self.vote = groups[3]
         self.role = groups[4]
         self.term = str(int(groups[5]))
-        self.commit_log = str(int(groups[6]))
-        self.last_log = str(int(groups[7]))
-        self.log = groups[8]
+        self.snapshot_log = str(int(groups[6]))
+        self.commit_log = str(int(groups[7]))
+        self.append_log = str(int(groups[8]))
+        self.log = groups[9]
 
 def mk_row(pid: int, n_peers: int, log: str) -> list[str]:
     result = ["" for _ in range(n_peers)]
@@ -57,10 +58,11 @@ def read_one(stream: TextIO = sys.stdin) -> bool:
 
     table = Table(title=title, padding=0)
     table.add_column("R", justify="center", no_wrap=True)  # Role
-    table.add_column("V", justify="center", no_wrap=True)  # Term
+    table.add_column("V", justify="center", no_wrap=True)  # Vote
     table.add_column("T", justify="center", no_wrap=True)  # Term
-    table.add_column("C", justify="center", no_wrap=True)  # Term
-    table.add_column("L", justify="center", no_wrap=True)  # Term
+    table.add_column("S", justify="center", no_wrap=True)  # Snapshot log
+    table.add_column("C", justify="center", no_wrap=True)  # Commit log
+    table.add_column("A", justify="center", no_wrap=True)  # Append log
     for _ in range(n_peers):
         table.add_column(f"Peer {_}", justify="left", no_wrap=False)
 
@@ -83,7 +85,7 @@ def read_one(stream: TextIO = sys.stdin) -> bool:
             last_leader = state.pid
             table.add_section()
 
-        rows = [state.role, state.vote, state.term, state.commit_log, state.last_log] + mk_row(state.pid, n_peers, state.log)
+        rows = [state.role, state.vote, state.term, state.snapshot_log, state.commit_log, state.append_log] + mk_row(state.pid, n_peers, state.log)
         table.add_row(*rows)
     console = Console()
     console.print(table)

@@ -40,7 +40,7 @@ def print_stat(screen: ScreenContext, stats: dict[int, PeerStat], ts: str, print
 
     table.add_row(*(["Term"] + list(map(lambda x: x.term, stats.values()))))
     table.add_row(*(["Role"] + list(map(lambda x: x.role, stats.values()))))
-    table.add_row(*(["Commit/Append"] + list(map(lambda x: x.log_index, stats.values()))))
+    table.add_row(*(["S/C/A"] + list(map(lambda x: x.log_index, stats.values()))))
     table.add_row(*(["Log"] + list(map(lambda x: x.log, stats.values()))))
 
     if len(stat_history) == 2:
@@ -95,7 +95,7 @@ if __name__ == "__main__":
                 peer_stats[state.pid].term = state.term
                 peer_stats[state.pid].vote = state.vote
                 peer_stats[state.pid].role = state.role
-                peer_stats[state.pid].log_index = f"{state.commit_log} / {state.last_log}"
+                peer_stats[state.pid].log_index = f"{state.snapshot_log} / {state.commit_log} / {state.append_log}"
                 peer_stats[state.pid].log = f"[{state.log_level[0]}]" + state.log
                 peer_stats[state.pid].updated = True
 
