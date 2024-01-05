@@ -26,6 +26,7 @@ type State interface {
 	Role() string
 	Base(term, follow int) BaseState
 	String() string
+	SnapshotIndex() int
 	LastLogIndex() int
 	Committed() int
 	GetLog(index int) (int, *Log)
@@ -110,17 +111,21 @@ func (s *BaseState) PollPeers(f func(peerID int, peerRPC *labrpc.ClientEnd)) {
 	}
 }
 
+func (s *BaseState) SnapshotIndex() int {
+	return s.r.snapshotIndex
+}
+
 func (s *BaseState) LastLogIndex() int {
-	return len(s.r.logs) + s.r.logIndexOffset - 1 // -1 for dummy entry
+	return len(s.r.logs) + s.SnapshotIndex() - 1 // -1 for dummy entry
 }
 
 // Call with holding LogRWLock
 func (s *BaseState) GetLog(index int) (int, *Log) {
 	index = s.logIndexWithOffset(index)
 	if index < 0 || index >= len(s.r.logs) {
-		return s.r.logIndexOffset + index, nil
+		return s.SnapshotIndex() + index, nil
 	}
-	return s.r.logIndexOffset + index, &s.r.logs[index]
+	return s.SnapshotIndex() + index, &s.r.logs[index]
 }
 
 func (s *BaseState) GetLogSince(index int) []Log {
@@ -134,7 +139,7 @@ func (s *BaseState) GetLogSince(index int) []Log {
 func (s *BaseState) FirstLogAtTerm(term int) (int, *Log) {
 	for i := 0; i < len(s.r.logs); i++ {
 		if s.r.logs[i].Term == term {
-			return s.r.logIndexOffset + i, &s.r.logs[i]
+			return s.SnapshotIndex() + i, &s.r.logs[i]
 		}
 	}
 	return 0, nil
@@ -142,10 +147,6 @@ func (s *BaseState) FirstLogAtTerm(term int) (int, *Log) {
 
 func (s *BaseState) Committed() int {
 	return s.r.commitIndex
-}
-
-func (s *BaseState) LogOffset() int {
-	return s.r.logIndexOffset
 }
 
 // Setters
@@ -224,7 +225,7 @@ func (s *BaseState) CommitLog(index int) (advance bool) {
 		advance = true
 		if i != s.r.commitIndex {
 			Fatal("%d commit index %d not match with log offset %d", s.Me(),
-				s.r.commitIndex, s.r.logIndexOffset)
+				s.r.commitIndex, s.SnapshotIndex())
 		}
 		s.UnlockLog()
 		s.r.applyCh <- ApplyMsg{
@@ -270,6 +271,6 @@ func (s *BaseState) logIndexWithOffset(index int) int {
 	if index < 0 {
 		return len(s.r.logs) + index
 	} else {
-		return index - s.r.logIndexOffset
+		return index - s.SnapshotIndex()
 	}
 }

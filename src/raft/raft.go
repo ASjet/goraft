@@ -77,10 +77,11 @@ type Raft struct {
 	stateMu sync.Mutex
 	state   State
 
-	logCond        *sync.Cond // Must hold this lock when accessing following fields
-	logIndexOffset int        // The index of the first log entry in logs
-	logs           []Log      // The actually log entries, the first elem is a dummy entry
-	commitIndex    int        // The index of highest log entry known to be committed
+	logCond       *sync.Cond // Must hold this lock when accessing following fields
+	snapshotIndex int        // The index of the first log entry in logs
+	logs          []Log      // The actually log entries, the first elem is a dummy entry
+	commitIndex   int        // The index of highest log entry known to be committed
+	snapshot      []byte
 }
 
 // return currentTerm and whether this server
