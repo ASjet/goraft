@@ -32,13 +32,8 @@ type LeaderState struct {
 	matchCh      chan matchRecord
 }
 
-func Leader(from State) *LeaderState {
-	// Leader can only come from candidate
-	if from.Role() != RoleCandidate {
-		Error("%s can not transition to leader since it's not a candidate", from)
-		panic("invalid state transition: only candidate can transition to leader")
-	}
-
+// Leader can only come from candidate
+func Leader(from *CandidateState) *LeaderState {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	ls := &LeaderState{

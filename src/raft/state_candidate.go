@@ -25,7 +25,6 @@ type CandidateState struct {
 }
 
 func Candidate(term int, from State) *CandidateState {
-	// Candidate can come from any state
 	cs := &CandidateState{
 		// A candidate always vote for itself
 		BaseState: from.Base(term, from.Me()),
