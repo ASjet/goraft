@@ -31,7 +31,7 @@ type State interface {
 	GetLog(index int) (int, *Log)
 
 	To(state State) (newState State)
-	Close() (success bool)
+	Close(msg string, args ...interface{}) (success bool)
 
 	// Call only term == curTerm
 	RequestVote(args *RequestVoteArgs) (granted bool)
@@ -240,15 +240,15 @@ func (s *BaseState) CommitLog(index int) (advance bool) {
 }
 
 func (s *BaseState) RequestVote(args *RequestVoteArgs) (granted bool) {
-	panic("not implemented")
+	panic("RequestVote not implemented")
 }
 
 func (s *BaseState) AppendEntries(args *AppendEntriesArgs) (success bool) {
-	panic("not implemented")
+	panic("AppendEntries not implemented")
 }
 
 func (s *BaseState) AppendCommand(command interface{}) (index int, term int) {
-	panic("not implemented")
+	panic("AppendCommand not implemented")
 }
 
 func (s *BaseState) String() string {
@@ -256,11 +256,11 @@ func (s *BaseState) String() string {
 }
 
 func (s *BaseState) Role() string {
-	panic("not implemented")
+	panic("Role not implemented")
 }
 
-func (s *BaseState) Close() bool {
-	panic("not implemented")
+func (s *BaseState) Close(msg string, args ...interface{}) bool {
+	panic("Close not implemented")
 }
 
 func (s *BaseState) logIndexWithOffset(index int) int {

@@ -173,9 +173,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		// If RPC request or response contains term T > currentTerm:
 		// set currentTerm = T, convert to follower (§5.1)
 		// We don't valid the log entries here since we won't vote for it
-		if rf.state.Close() {
-			Info("%s receive higher term %d from %d, revert to follower",
-				rf.state, args.Term, args.Candidate)
+		if rf.state.Close("receive higher term %d from %d, revert to follower",
+			args.Term, args.Candidate) {
 			rf.state.To(Follower(args.Term, NoVote, rf.state))
 		}
 	}
@@ -201,9 +200,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		// If RPC request or response contains term T > currentTerm:
 		// set currentTerm = T, convert to follower (§5.1)
 		// We don't valid the log entries here since we won't vote for it
-		if rf.state.Close() {
-			Info("%s receive higher term %d from %d, revert to follower",
-				rf.state, args.Term, args.Leader)
+		if rf.state.Close("receive higher term %d from %d, revert to follower",
+			args.Term, args.Leader) {
 			rf.state.To(Follower(args.Term, NoVote, rf.state))
 		}
 	}
@@ -258,7 +256,7 @@ func (rf *Raft) Kill() {
 	rf.dead.Store(true)
 	// Your code here, if desired.
 	rf.stateMu.Lock()
-	rf.state.Close()
+	rf.state.Close("killed")
 	rf.stateMu.Unlock()
 }
 

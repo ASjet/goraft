@@ -2,6 +2,7 @@ package raft
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 
 	"goraft/src/util"
@@ -43,8 +44,7 @@ func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 				s, args.Candidate)
 			return false
 		}
-		if s.Close() {
-			Info("%s start following %d", s, args.Candidate)
+		if s.Close("start following %d", args.Candidate) {
 			s.To(Follower(args.Term, args.Candidate, s))
 		}
 		return true
@@ -61,8 +61,7 @@ func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 func (s *FollowerState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	switch s.Voted() {
 	case NoVote:
-		if s.Close() {
-			Info("%s start following %d", s, args.Leader)
+		if s.Close("start following %d", args.Leader) {
 			ns := s.To(Follower(args.Term, args.Leader, s))
 			return ns.AppendEntries(args)
 		}
@@ -80,11 +79,11 @@ func (s *FollowerState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	}
 }
 
-func (s *FollowerState) Close() bool {
+func (s *FollowerState) Close(msg string, args ...interface{}) bool {
 	if !s.closed.CompareAndSwap(false, true) {
 		return false
 	}
-	Info("%s closing", s)
+	Info("%s closing: %s", s, fmt.Sprintf(msg, args...))
 	s.timer.Stop()
 	Info("%s closed", s)
 	return true

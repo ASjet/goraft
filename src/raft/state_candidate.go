@@ -2,6 +2,7 @@ package raft
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,18 +49,17 @@ func (s *CandidateState) RequestVote(args *RequestVoteArgs) (granted bool) {
 
 func (s *CandidateState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	// If this RPC is received, it means the leader of this term is already elected
-	if s.Close() {
-		Info("%s peer %d won this election, revert to follower", s, args.Leader)
+	if s.Close("peer %d won this election, revert to follower", args.Leader) {
 		s.To(Follower(args.Term, args.Leader, s))
 	}
 	return true
 }
 
-func (s *CandidateState) Close() bool {
+func (s *CandidateState) Close(msg string, args ...interface{}) bool {
 	if !s.closed.CompareAndSwap(false, true) {
 		return false
 	}
-	Info("%s closing", s)
+	Info("%s closing: %s", s, fmt.Sprintf(msg, args...))
 	s.timer.Stop()
 	s.wg.Wait()
 	Info("%s closed", s)
@@ -112,17 +112,15 @@ func (s *CandidateState) requestVote(peerID int, peerRPC *labrpc.ClientEnd) {
 
 		Info("%s got vote from %d(%d/%d)", s, peerID, votes, s.Peers())
 
-		if votes >= s.Majority() && s.Close() {
+		if votes >= s.Majority() && s.Close("got majority votes(%d/%d), transition to leader", votes, s.Peers()) {
 			// Got majority votes, become leader
 			s.Lock()
-			Info("%s got majority votes(%d/%d), transition to leader", s, votes, s.Peers())
 			s.To(Leader(s))
 			s.Unlock()
 		}
 	} else {
 		s.Lock()
-		if curTerm := s.Term(); reply.Term > curTerm && s.Close() {
-			Info("%s got higher term %d (current %d), transition to follower", s, reply.Term, curTerm)
+		if curTerm := s.Term(); reply.Term > curTerm && s.Close("got higher term %d (current %d), transition to follower", reply.Term, curTerm) {
 			s.To(Follower(reply.Term, NoVote, s))
 		}
 		s.Unlock()

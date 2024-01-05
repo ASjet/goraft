@@ -2,6 +2,7 @@ package raft
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sort"
 	"sync"
@@ -82,11 +83,11 @@ func (s *LeaderState) AppendCommand(command interface{}) (index int, term int) {
 	return
 }
 
-func (s *LeaderState) Close() bool {
+func (s *LeaderState) Close(msg string, args ...interface{}) bool {
 	if !s.closed.CompareAndSwap(false, true) {
 		return false
 	}
-	Info("%s closing", s)
+	Info("%s closing: %s", s, fmt.Sprintf(msg, args...))
 	s.cancel()
 	s.BroadcastLog()
 	s.wg.Wait()
@@ -120,8 +121,7 @@ func (s *LeaderState) callAppendEntries(args *AppendEntriesArgs, peerID int,
 		s.Lock()
 		if curTerm := s.Term(); reply.Term > curTerm {
 			ok = false
-			if s.Close() {
-				Info("%s got higher term %d (current %d), revert to follower", s, reply.Term, curTerm)
+			if s.Close("got higher term %d (current %d), revert to follower", reply.Term, curTerm) {
 				s.To(Follower(reply.Term, NoVote, s))
 			}
 		}
