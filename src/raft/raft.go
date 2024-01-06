@@ -93,11 +93,7 @@ func (rf *Raft) GetState() (int, bool) {
 	return rf.state.Term(), rf.state.Role() == RoleLeader
 }
 
-// save Raft's persistent state to stable storage,
-// where it can later be retrieved after a crash and restart.
-// see paper's Figure 2 for a description of what should be persistent.
-func (rf *Raft) persist() {
-	// Your code here (2C).
+func (rf *Raft) dumpState() []byte {
 	ps := &persistState{
 		Term: rf.state.Term(),
 		Vote: rf.state.Voted(),
@@ -106,9 +102,21 @@ func (rf *Raft) persist() {
 	buf := new(bytes.Buffer)
 	if err := labgob.NewEncoder(buf).Encode(ps); err != nil {
 		Fatal("Persist state failed: %s", err)
-		return
 	}
-	rf.persister.SaveRaftState(buf.Bytes())
+	return buf.Bytes()
+}
+
+// save Raft's persistent state to stable storage,
+// where it can later be retrieved after a crash and restart.
+// see paper's Figure 2 for a description of what should be persistent.
+func (rf *Raft) persistState() {
+	// Your code here (2C).
+	rf.persister.SaveRaftState(rf.dumpState())
+}
+
+func (rf *Raft) persistSnapshot(snapshot []byte) {
+	// Your code here (2D).
+	rf.persister.SaveStateAndSnapshot(rf.dumpState(), snapshot)
 }
 
 // restore previously persisted state.
@@ -139,9 +147,7 @@ func (rf *Raft) readPersist(data []byte) {
 // A service wants to switch to snapshot.  Only do so if Raft hasn't
 // have more recent info since it communicate the snapshot on applyCh.
 func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int, snapshot []byte) bool {
-
-	// Your code here (2D).
-
+	// Always return true here
 	return true
 }
 
@@ -151,7 +157,40 @@ func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int,
 // that index. Raft should now trim its log as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	// Your code here (2D).
-	// NOTE: Need to maintain the log index offset and dummy log entry
+	rf.stateMu.Lock()
+	rf.logCond.L.Lock()
+
+	actualIndex := index - rf.snapshotIndex
+	if actualIndex <= 0 {
+		// The snapshot is too old
+		Info("%s drop old snapshot at index %d", rf.state, index)
+		rf.logCond.L.Unlock()
+		rf.stateMu.Unlock()
+		return
+	}
+
+	Debug("%s on demand snapshot at index %d", rf.state, index)
+
+	lastIndex := rf.state.LastLogIndex()
+
+	if index > lastIndex {
+		Info("%s on demand snapshot covered all logs, drop all", rf.state)
+		rf.logs = []Log{{rf.state.Term(), nil}}
+	} else {
+		Info("%s on demand snapshot covered part logs, drop [:%d]", rf.state, actualIndex)
+		rf.logs = rf.logs[actualIndex:]
+	}
+
+	if rf.commitIndex < index {
+		rf.commitIndex = index
+	}
+	rf.snapshot = snapshot
+	rf.snapshotIndex = index
+	Info("%s make on demand snapshot at index %d", rf.state, index)
+	rf.persistSnapshot(snapshot)
+
+	rf.logCond.L.Unlock()
+	rf.stateMu.Unlock()
 }
 
 // example RequestVote RPC handler.

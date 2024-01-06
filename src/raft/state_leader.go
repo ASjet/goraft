@@ -220,6 +220,7 @@ func (s *LeaderState) syncPeerEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 func (s *LeaderState) sendEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 	s.RLockLog()
 	nextIndex := int(s.nextIndexes[peerID].Load())
+	// TODO: handle the case that nextIndex is out of range
 	prevIndex, prevLog := s.GetLog(nextIndex - 1)
 	args := &AppendEntriesArgs{
 		Term:         s.Term(),
