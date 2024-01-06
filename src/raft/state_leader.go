@@ -30,7 +30,7 @@ type LeaderState struct {
 
 	nextIndexes  []atomic.Int64
 	matchIndexes []atomic.Int64
-	matchCh      chan matchRecord
+	matchCh      chan *matchRecord
 }
 
 // Leader can only come from candidate
@@ -43,9 +43,9 @@ func Leader(from *CandidateState) *LeaderState {
 		cancel:       cancel,
 		nextIndexes:  make([]atomic.Int64, from.Peers()),
 		matchIndexes: make([]atomic.Int64, from.Peers()),
-		matchCh:      make(chan matchRecord, from.Peers()),
+		matchCh:      make(chan *matchRecord, from.Peers()),
 	}
-	nextIndex := int64(ls.Committed() + 1)
+	nextIndex := int64(ls.LastLogIndex() + 1)
 	for i := range ls.nextIndexes {
 		ls.nextIndexes[i].Store(nextIndex)
 	}
@@ -152,14 +152,13 @@ func (s *LeaderState) sendHeartbeats() {
 
 func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
 	s.RLockLog()
-	nextIndex := int(s.nextIndexes[peerID].Load())
-	prevIndex, prevLog := s.GetLog(nextIndex - 1)
+	prevIndex, prevLog := s.GetLog(s.Committed())
 	args := &AppendEntriesArgs{
 		Term:         s.Term(),
 		Leader:       s.Me(),
 		PrevLogIndex: prevIndex,
 		PrevLogTerm:  prevLog.Term,
-		Entries:      s.GetLogSince(nextIndex),
+		Entries:      nil,
 		LeaderCommit: s.Committed(),
 	}
 	s.RUnlockLog()
@@ -168,19 +167,17 @@ func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
 		return
 	}
 
-	Debug("%s sending heartbeat with log[%d:%d] to peer %d", s,
-		nextIndex, nextIndex+len(args.Entries), peerID)
+	Debug("%s sending heartbeat to peer %d", s, peerID)
 	reply, ok := s.callAppendEntries(args, peerID, peerRPC)
 	if !ok || s.closed.Load() {
 		return
 	}
 
-	if reply.Success {
-		newMatch := int64(reply.LastLogIndex)
-		if oldMatch := s.matchIndexes[peerID].Swap(newMatch); oldMatch < newMatch {
-			s.matchCh <- matchRecord{peerID, int(newMatch)}
-			Info("%s peer %d match log at index %d", s, peerID, newMatch)
-		}
+	newMatch := int64(reply.LastLogIndex)
+	oldMatch := s.matchIndexes[peerID].Swap(newMatch)
+	if reply.Success && oldMatch < newMatch {
+		s.matchCh <- &matchRecord{peerID, reply.LastLogIndex}
+		Info("%s peer %d match log at index %d", s, peerID, newMatch)
 	}
 
 	peerNextIndex := s.updateNext(peerID, args.PrevLogIndex,
@@ -201,8 +198,7 @@ func (s *LeaderState) syncPeerEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 	for !s.closed.Load() {
 		s.RLockLog()
 		nextIndex := int(s.nextIndexes[peerID].Load())
-		matchIndex := int(s.matchIndexes[peerID].Load())
-		if nextIndex == matchIndex+1 && nextIndex > s.LastLogIndex() {
+		if nextIndex > s.LastLogIndex() {
 			// There is no new entry to sync, wait on a condition variable
 			Info("%s waiting for new entries for peer %d", s, peerID)
 			s.WaitLog()
@@ -239,6 +235,10 @@ func (s *LeaderState) sendEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 		return
 	}
 
+	if len(args.Entries) == 0 {
+		Fatal("%s sending no entry to peer %d", s, peerID)
+	}
+
 	Info("%s appending log[%d:%d] to peer %d", s,
 		nextIndex, nextIndex+len(args.Entries), peerID)
 	reply, ok := s.callAppendEntries(args, peerID, peerRPC)
@@ -246,15 +246,14 @@ func (s *LeaderState) sendEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 		return
 	}
 
-	if reply.Success {
-		newMatch := int64(reply.LastLogIndex)
-		if oldMatch := s.matchIndexes[peerID].Swap(newMatch); oldMatch < newMatch {
-			Debug("%s append log[%d:%d] to peer %d successfully",
-				s, nextIndex, nextIndex+len(args.Entries), peerID)
-			// FIXME: send on closed channel
-			s.matchCh <- matchRecord{peerID, int(newMatch)}
-			Info("%s peer %d match log at index %d", s, peerID, newMatch)
-		}
+	newMatch := int64(reply.LastLogIndex)
+	oldMatch := s.matchIndexes[peerID].Swap(newMatch)
+	if reply.Success && oldMatch < newMatch {
+		Debug("%s append log[%d:%d] to peer %d successfully",
+			s, nextIndex, nextIndex+len(args.Entries), peerID)
+		// FIXME: send on closed channel
+		s.matchCh <- &matchRecord{peerID, reply.LastLogIndex}
+		Info("%s peer %d match log at index %d", s, peerID, newMatch)
 	} else {
 		Debug("%s append log[%d:%d] to peer %d failed",
 			s, nextIndex, nextIndex+len(args.Entries), peerID)
@@ -300,19 +299,8 @@ func (s *LeaderState) majorMatch(match []int) int {
 	return matchSlice[len(matchSlice)/2]
 }
 
-func (s *LeaderState) updateNext(peerID, prevIndex, lastIndex, lastTerm int) int {
-	nextIndex := lastIndex + 1
-	if lastIndex == prevIndex-1 {
-		// There is a conflict
-		s.RLockLog()
-		termIndex, termLog := s.FirstLogAtTerm(lastTerm)
-		s.RUnlockLog()
-		if termLog != nil {
-			nextIndex = termIndex
-			Info("%s peer %d has conflict at log[%d], retry from log[%d]",
-				s, peerID, prevIndex, termIndex)
-		}
-	}
+func (s *LeaderState) updateNext(peerID, prevIndex, matchIndex, matchTerm int) int {
+	nextIndex := matchIndex + 1
 	oldNext := s.nextIndexes[peerID].Swap(int64(nextIndex))
 	Debug("%s update peer %d next index %d => %d", s, peerID, oldNext, nextIndex)
 	return nextIndex

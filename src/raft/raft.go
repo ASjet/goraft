@@ -187,7 +187,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	Debug("%s RPC AppendEntries from %d", rf.state, args.Leader)
 	rf.stateMu.Lock()
 	defer rf.stateMu.Unlock()
-	defer Debug("%s RPC AppendEntries  returned to %d", rf.state, args.Leader)
+	defer Debug("%s RPC AppendEntries returned to %d", rf.state, args.Leader)
 
 	reply.Term = rf.state.Term()
 

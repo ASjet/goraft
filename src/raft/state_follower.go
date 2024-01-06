@@ -169,8 +169,10 @@ func (s *FollowerState) handleEntries(leader, prevIndex, prevTerm int, entries [
 	if prevLog.Term != prevTerm {
 		Info("%s reject logs: prev term %d at index %d is conflict with %d", s,
 			prevTerm, prevIndex, prevLog.Term)
-		s.DeleteLogSince(prevIndex)
-		Info("%s delete log since index %d", s, prevIndex)
+		// Fallback the whole term once a time
+		termIndex, _ := s.FirstLogAtTerm(prevLog.Term)
+		s.DeleteLogSince(termIndex)
+		Info("%s delete log since index %d", s, termIndex)
 		return false
 	}
 
