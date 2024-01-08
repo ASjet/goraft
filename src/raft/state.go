@@ -2,6 +2,7 @@ package raft
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"goraft/src/labrpc"
 )
@@ -24,7 +25,7 @@ type State interface {
 	Me() int
 	Peers() int
 	Role() string
-	Base(term, follow int) BaseState
+	Base(term, follow int) *BaseState
 	String() string
 	SnapshotIndex() int
 	LastLogIndex() int
@@ -63,6 +64,7 @@ type BaseState struct {
 	r      *Raft
 	term   int
 	follow int
+	closed atomic.Bool
 }
 
 func Base(r *Raft) *BaseState {
@@ -75,8 +77,8 @@ func Base(r *Raft) *BaseState {
 
 // Getters
 
-func (s *BaseState) Base(term, follow int) BaseState {
-	return BaseState{
+func (s *BaseState) Base(term, follow int) *BaseState {
+	return &BaseState{
 		term:   term,
 		follow: follow,
 		r:      s.r,

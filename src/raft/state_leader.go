@@ -22,11 +22,10 @@ type matchRecord struct {
 }
 
 type LeaderState struct {
-	BaseState
+	*BaseState
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
-	closed atomic.Bool
 
 	nextIndexes  []atomic.Int64
 	matchIndexes []atomic.Int64

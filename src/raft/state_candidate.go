@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"goraft/src/labrpc"
@@ -16,10 +15,9 @@ var (
 )
 
 type CandidateState struct {
-	BaseState
-	wg     sync.WaitGroup
-	closed atomic.Bool
-	timer  *util.Timer
+	*BaseState
+	wg    sync.WaitGroup
+	timer *util.Timer
 
 	votesMu sync.Mutex
 	votes   map[int]bool

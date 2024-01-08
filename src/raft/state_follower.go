@@ -3,7 +3,6 @@ package raft
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 
 	"goraft/src/util"
 )
@@ -13,9 +12,8 @@ var (
 )
 
 type FollowerState struct {
-	BaseState
-	timer  *util.Timer
-	closed atomic.Bool
+	*BaseState
+	timer *util.Timer
 }
 
 func Follower(term, follow int, from State) *FollowerState {
