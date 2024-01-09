@@ -151,16 +151,14 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	Debug("%s make on demand snapshot at index %d", rf.state, index)
 	defer Debug("%s made on demand snapshot at index %d successfully", rf.state, index)
 	// Your code here (2D).
-	// FIXME: deadlock here
-	rf.state.Lock()
+	// NOTE: no need to hold rf.state.Lock() and will cause deadlock
 	rf.state.LockLog()
+	defer rf.state.UnlockLog()
 
 	actualIndex := index - rf.snapshotIndex
 	if actualIndex <= 0 {
 		// The snapshot is too old
 		Info("%s drop old snapshot at index %d", rf.state, index)
-		rf.state.UnlockLog()
-		rf.state.Unlock()
 		return
 	}
 
@@ -181,9 +179,6 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	rf.snapshotIndex = index
 	Info("%s make on demand snapshot at index %d", rf.state, index)
 	rf.persistSnapshot(snapshot)
-
-	rf.state.UnlockLog()
-	rf.state.Unlock()
 }
 
 // example RequestVote RPC handler.
