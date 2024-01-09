@@ -3,6 +3,7 @@ package raft
 import (
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"goraft/src/labrpc"
 )
@@ -37,6 +38,11 @@ type State interface {
 
 	AppendCommand(command interface{}) (index int, term int)
 
+	Lock()
+	Unlock()
+	LockLog()
+	UnlockLog()
+
 	// Call only term == curTerm
 	RequestVote(args *RequestVoteArgs) (granted bool)
 	AppendEntries(args *AppendEntriesArgs) (success bool)
@@ -65,6 +71,9 @@ type BaseState struct {
 	term   int
 	follow int
 	closed atomic.Bool
+
+	lockTraceID    atomic.Int64
+	logLockTraceID atomic.Int64
 }
 
 func Base(r *Raft) *BaseState {
@@ -164,30 +173,64 @@ func (s *BaseState) To(state State) State {
 }
 
 func (s *BaseState) Lock() {
+	traceID := time.Now().UnixNano()
+	if BacktraceLock {
+		n, f, l := Call()
+		Info("[%d]%s:%d: %s Lock(%d)", s.Me(), f, l, n, traceID)
+	}
 	s.r.stateMu.Lock()
+	s.lockTraceID.Store(traceID)
 }
 
 func (s *BaseState) Unlock() {
+	if BacktraceLock {
+		n, f, l := Call()
+		Info("[%d]%s:%d: %s Unlock(%d)", s.Me(), f, l, n, s.lockTraceID.Load())
+	}
 	s.r.stateMu.Unlock()
 }
 
 func (s *BaseState) RLockLog() {
+	traceID := time.Now().UnixNano()
+	if BacktraceLock {
+		n, f, l := Call()
+		Info("[%d]%s:%d: %s RLockLog(%d)", s.Me(), f, l, n, traceID)
+	}
 	s.r.logCond.L.Lock()
+	s.logLockTraceID.Store(traceID)
 }
 
 func (s *BaseState) RUnlockLog() {
+	if BacktraceLock {
+		n, f, l := Call()
+		Info("[%d]%s:%d: %s RUnlockLog(%d)", s.Me(), f, l, n, s.logLockTraceID.Load())
+	}
 	s.r.logCond.L.Unlock()
 }
 
 func (s *BaseState) LockLog() {
+	traceID := time.Now().UnixNano()
+	if BacktraceLock {
+		n, f, l := Call()
+		Info("[%d]%s:%d: %s LockLog(%d)", s.Me(), f, l, n, traceID)
+	}
 	s.r.logCond.L.Lock()
+	s.logLockTraceID.Store(traceID)
 }
 
 func (s *BaseState) UnlockLog() {
+	if BacktraceLock {
+		n, f, l := Call()
+		Info("[%d]%s:%d: %s UnlockLog(%d)", s.Me(), f, l, n, s.logLockTraceID.Load())
+	}
 	s.r.logCond.L.Unlock()
 }
 
 func (s *BaseState) WaitLog() {
+	if BacktraceLock {
+		n, f, l := Call()
+		Info("[%d]%s:%d: %s WaitLog(%d)", s.Me(), f, l, n, s.logLockTraceID.Load())
+	}
 	s.r.logCond.Wait()
 }
 

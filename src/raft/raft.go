@@ -88,8 +88,8 @@ type Raft struct {
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
 	// Your code here (2A).
-	rf.stateMu.Lock()
-	defer rf.stateMu.Unlock()
+	rf.state.Lock()
+	defer rf.state.Unlock()
 	return rf.state.Term(), rf.state.Role() == RoleLeader
 }
 
@@ -122,26 +122,18 @@ func (rf *Raft) persistSnapshot(snapshot []byte) {
 // restore previously persisted state.
 func (rf *Raft) readPersist(data []byte) {
 	if data == nil || len(data) < 1 { // bootstrap without any state?
-		rf.stateMu.Lock()
 		rf.state = Follower(0, NoVote, Base(rf))
-		rf.stateMu.Unlock()
 		return
 	}
 	// Your code here (2C).
 	ps := new(persistState)
 	if err := labgob.NewDecoder(bytes.NewBuffer(data)).Decode(ps); err != nil {
-		rf.stateMu.Lock()
 		rf.state = Follower(0, NoVote, Base(rf))
-		rf.stateMu.Unlock()
 		return
 	}
 
-	rf.stateMu.Lock()
-	rf.logCond.L.Lock()
 	rf.state = Follower(ps.Term, ps.Vote, Base(rf))
 	rf.logs = ps.Logs
-	rf.logCond.L.Unlock()
-	rf.stateMu.Unlock()
 }
 
 // A service wants to switch to snapshot.  Only do so if Raft hasn't
@@ -156,20 +148,21 @@ func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int,
 // service no longer needs the log through (and including)
 // that index. Raft should now trim its log as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
+	Debug("%s make on demand snapshot at index %d", rf.state, index)
+	defer Debug("%s made on demand snapshot at index %d successfully", rf.state, index)
 	// Your code here (2D).
-	rf.stateMu.Lock()
-	rf.logCond.L.Lock()
+	// FIXME: deadlock here
+	rf.state.Lock()
+	rf.state.LockLog()
 
 	actualIndex := index - rf.snapshotIndex
 	if actualIndex <= 0 {
 		// The snapshot is too old
 		Info("%s drop old snapshot at index %d", rf.state, index)
-		rf.logCond.L.Unlock()
-		rf.stateMu.Unlock()
+		rf.state.UnlockLog()
+		rf.state.Unlock()
 		return
 	}
-
-	Debug("%s on demand snapshot at index %d", rf.state, index)
 
 	lastIndex := rf.state.LastLogIndex()
 
@@ -189,16 +182,16 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	Info("%s make on demand snapshot at index %d", rf.state, index)
 	rf.persistSnapshot(snapshot)
 
-	rf.logCond.L.Unlock()
-	rf.stateMu.Unlock()
+	rf.state.UnlockLog()
+	rf.state.Unlock()
 }
 
 // example RequestVote RPC handler.
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
 	Debug("%s RPC RequestVote from %d", rf.state, args.Candidate)
-	rf.stateMu.Lock()
-	defer rf.stateMu.Unlock()
+	rf.state.Lock()
+	defer rf.state.Unlock()
 	defer Debug("%s RPC RequestVote returned to %d", rf.state, args.Candidate)
 
 	reply.Term = rf.state.Term()
@@ -224,8 +217,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	Debug("%s RPC AppendEntries from %d", rf.state, args.Leader)
-	rf.stateMu.Lock()
-	defer rf.stateMu.Unlock()
+	rf.state.Lock()
+	defer rf.state.Unlock()
 	defer Debug("%s RPC AppendEntries returned to %d", rf.state, args.Leader)
 
 	reply.Term = rf.state.Term()
@@ -247,18 +240,18 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	reply.Success = rf.state.AppendEntries(args)
-	rf.logCond.L.Lock()
+	rf.state.LockLog()
 	index, log := rf.state.GetLog(-1)
 	if log != nil {
 		reply.LastLogIndex, reply.LastLogTerm = index, log.Term
 	}
-	rf.logCond.L.Unlock()
+	rf.state.UnlockLog()
 }
 
 func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapshotReply) {
 	Debug("%s RPC InstallSnapshot from %d", rf.state, args.Leader)
-	rf.stateMu.Lock()
-	defer rf.stateMu.Unlock()
+	rf.state.Lock()
+	defer rf.state.Unlock()
 	defer Debug("%s RPC InstallSnapshot returned to %d", rf.state, args.Leader)
 
 	reply.Term = rf.state.Term()
@@ -299,8 +292,8 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader := false
 
 	// Your code here (2B).
-	rf.stateMu.Lock()
-	defer rf.stateMu.Unlock()
+	rf.state.Lock()
+	defer rf.state.Unlock()
 
 	if isLeader = rf.state.Role() == RoleLeader; isLeader {
 		index, term = rf.state.AppendCommand(command)
@@ -321,9 +314,9 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 func (rf *Raft) Kill() {
 	rf.dead.Store(true)
 	// Your code here, if desired.
-	rf.stateMu.Lock()
+	rf.state.Lock()
 	rf.state.Close("killed")
-	rf.stateMu.Unlock()
+	rf.state.Unlock()
 }
 
 func (rf *Raft) killed() bool {

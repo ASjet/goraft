@@ -2,12 +2,16 @@ package raft
 
 import (
 	llog "log"
+	"runtime"
 
 	"github.com/sirupsen/logrus"
 )
 
 // Debugging
-const debug = false
+const (
+	debug         = false
+	BacktraceLock = false
+)
 
 type LogLevel int
 
@@ -109,4 +113,12 @@ func (l *Logger) Fatal(msg string, args ...interface{}) {
 	if l.level <= LevelFatal {
 		llog.Fatalf("[FATL]"+msg, args...)
 	}
+}
+
+func Call() (name, file string, line int) {
+	pc, f, l, ok := runtime.Caller(2)
+	if !ok {
+		panic("get call stack failed")
+	}
+	return runtime.FuncForPC(pc).Name(), f, l
 }
