@@ -57,3 +57,23 @@ func (s *AppendEntriesReply) String() string {
 	return fmt.Sprintf("T:%d,S:%v,LI:%d,LT:%d",
 		s.Term, s.Success, s.LastLogIndex, s.LastLogTerm)
 }
+
+type InstallSnapshotArgs struct {
+	Term         int
+	Leader       int
+	LastLogIndex int
+	LastLogTerm  int
+	Snapshot     []byte
+}
+
+func (s *InstallSnapshotArgs) String() string {
+	return fmt.Sprintf("T:%d,LI:%d,LT:%d", s.Term, s.LastLogIndex, s.LastLogTerm)
+}
+
+type InstallSnapshotReply struct {
+	Term int
+}
+
+func (s *InstallSnapshotReply) String() string {
+	return fmt.Sprintf("T:%d", s.Term)
+}

@@ -255,6 +255,32 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.logCond.L.Unlock()
 }
 
+func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapshotReply) {
+	Debug("%s RPC InstallSnapshot from %d", rf.state, args.Leader)
+	rf.stateMu.Lock()
+	defer rf.stateMu.Unlock()
+	defer Debug("%s RPC InstallSnapshot returned to %d", rf.state, args.Leader)
+
+	reply.Term = rf.state.Term()
+
+	// 1. Reply immediately if term < currentTerm
+	if args.Term < reply.Term {
+		return
+	}
+
+	if args.Term > reply.Term {
+		// If RPC request or response contains term T > currentTerm:
+		// set currentTerm = T, convert to follower (§5.1)
+		// We don't valid the log entries here since we won't vote for it
+		if rf.state.Close("receive higher term %d from %d, revert to follower",
+			args.Term, args.Leader) {
+			rf.state.To(Follower(args.Term, NoVote, rf.state))
+		}
+	}
+
+	rf.state.InstallSnapshot(args)
+}
+
 // the service using Raft (e.g. a k/v server) wants to start
 // agreement on the next command to be appended to Raft's log. if this
 // server isn't the leader, returns false. otherwise start the

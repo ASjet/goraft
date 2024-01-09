@@ -35,12 +35,12 @@ type State interface {
 	To(state State) (newState State)
 	Close(msg string, args ...interface{}) (success bool)
 
+	AppendCommand(command interface{}) (index int, term int)
+
 	// Call only term == curTerm
 	RequestVote(args *RequestVoteArgs) (granted bool)
-	// Call only term == curTerm
 	AppendEntries(args *AppendEntriesArgs) (success bool)
-
-	AppendCommand(command interface{}) (index int, term int)
+	InstallSnapshot(args *InstallSnapshotArgs) (success bool)
 }
 
 // logPrefix always access the state's immutable fields
@@ -255,6 +255,10 @@ func (s *BaseState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 
 func (s *BaseState) AppendCommand(command interface{}) (index int, term int) {
 	panic("AppendCommand not implemented")
+}
+
+func (s *BaseState) InstallSnapshot(args *InstallSnapshotArgs) (success bool) {
+	panic("InstallSnapshot not implemented")
 }
 
 func (s *BaseState) String() string {
