@@ -151,6 +151,10 @@ func (s *BaseState) Committed() int {
 	return s.r.commitIndex
 }
 
+func (s *BaseState) GetSnapshot() []byte {
+	return s.r.snapshot
+}
+
 // Setters
 
 func (s *BaseState) To(state State) State {
@@ -217,6 +221,10 @@ func (s *BaseState) CommitLog(index int) (advance bool) {
 	s.LockLog()
 	defer s.UnlockLog()
 
+	if s.r.commitIndex < s.SnapshotIndex() {
+		s.r.commitIndex = s.SnapshotIndex()
+	}
+
 	advance = false
 	for s.r.commitIndex < index {
 		i, log := s.GetLog(s.r.commitIndex + 1)
@@ -271,6 +279,7 @@ func (s *BaseState) ApplySnapshot(index, term int, snapshot []byte) (applied boo
 
 	s.r.snapshot = snapshot
 	s.r.snapshotIndex = index
+	s.r.commitIndex = index
 	s.r.persistSnapshot(snapshot)
 	s.UnlockLog()
 

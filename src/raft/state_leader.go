@@ -135,6 +135,30 @@ func (s *LeaderState) callAppendEntries(args *AppendEntriesArgs, peerID int,
 	return reply, ok
 }
 
+// This should be called concurrently rather than one-by-one
+func (s *LeaderState) callInstallSnapshot(args *InstallSnapshotArgs, peerID int,
+	peerRPC *labrpc.ClientEnd) (reply *InstallSnapshotReply, ok bool) {
+	reply = new(InstallSnapshotReply)
+	Debug("%s calling peers[%d].InstallSnapshot(%s)", s, peerID, args)
+	if !peerRPC.Call("Raft.InstallSnapshot", args, reply) || s.closed.Load() {
+		if !s.closed.Load() {
+			Error("%s peers[%d].InstallSnapshot(%s) failed", s, peerID, args)
+		}
+		return nil, false
+	}
+	Debug("%s peers[%d].InstallSnapshot(%s) => (%s)", s, peerID, args, reply)
+	ok = true
+	s.Lock()
+	if curTerm := s.Term(); reply.Term > curTerm {
+		ok = false
+		if s.Close("got higher term %d (current %d), revert to follower", reply.Term, curTerm) {
+			s.To(Follower(reply.Term, NoVote, s))
+		}
+	}
+	s.Unlock()
+	return reply, ok
+}
+
 func (s *LeaderState) sendHeartbeats() {
 	defer s.wg.Done()
 	defer Info("%s sendHeartbeats exited", s)
@@ -225,7 +249,13 @@ func (s *LeaderState) syncPeerEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 func (s *LeaderState) sendEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 	s.RLockLog()
 	nextIndex := int(s.nextIndexes[peerID].Load())
-	// TODO: handle the case that nextIndex is out of range
+	if nextIndex < s.SnapshotIndex() {
+		s.RUnlockLog()
+		// Send a snapshot instead of entries
+		Info("%s peer %d is lagging behind, send snapshot", s, peerID)
+		s.sendSnapshot(peerID, peerRPC)
+		return
+	}
 	prevIndex, prevLog := s.GetLog(nextIndex - 1)
 	args := &AppendEntriesArgs{
 		Term:         s.Term(),
@@ -266,6 +296,27 @@ func (s *LeaderState) sendEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 	}
 
 	s.updateNext(peerID, args.PrevLogIndex, reply.LastLogIndex, reply.LastLogTerm)
+}
+
+func (s *LeaderState) sendSnapshot(peerID int, peerRPC *labrpc.ClientEnd) {
+	s.RLockLog()
+	lastLogIndex, lastLog := s.GetLog(s.SnapshotIndex())
+	args := &InstallSnapshotArgs{
+		Term:         s.Term(),
+		Leader:       s.Me(),
+		LastLogIndex: lastLogIndex,
+		LastLogTerm:  lastLog.Term,
+		Snapshot:     s.GetSnapshot(),
+	}
+	s.RUnlockLog()
+
+	if s.closed.Load() {
+		return
+	}
+
+	Info("%s send snapshot at index %d term %d to perr %d",
+		args.LastLogIndex, args.LastLogTerm, peerID)
+	s.callInstallSnapshot(args, peerID, peerRPC)
 }
 
 func (s *LeaderState) commitMatch(nPeers int) {
