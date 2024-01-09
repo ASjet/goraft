@@ -77,6 +77,22 @@ func (s *FollowerState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	}
 }
 
+func (s *FollowerState) InstallSnapshot(args *InstallSnapshotArgs) (success bool) {
+	switch s.Voted() {
+	case NoVote:
+		if s.Close("start following %d", args.Leader) {
+			ns := s.To(Follower(args.Term, args.Leader, s))
+			return ns.InstallSnapshot(args)
+		}
+		return false
+	case args.Leader:
+		s.timer.Restart()
+		return s.ApplySnapshot(args.LastLogIndex, args.LastLogTerm, args.Snapshot)
+	default:
+		return false
+	}
+}
+
 func (s *FollowerState) Close(msg string, args ...interface{}) bool {
 	if !s.closed.CompareAndSwap(false, true) {
 		return false

@@ -245,6 +245,47 @@ func (s *BaseState) CommitLog(index int) (advance bool) {
 	return advance
 }
 
+func (s *BaseState) ApplySnapshot(index, term int, snapshot []byte) (applied bool) {
+	s.LockLog()
+
+	// 5. Save snapshot file, discard any existing or partial snapshot with a smaller index
+	if s.SnapshotIndex() >= index {
+		// Already applied (an newer) snapshot
+		Info("%s reject to apply old snapshot at index %d (current is %d), term %d",
+			s, index, s.SnapshotIndex(), term)
+		s.UnlockLog()
+		return false
+	}
+
+	if s.LastLogIndex() >= index {
+		// 6. If existing log entry has same index and term as snapshot’s last
+		//    included entry, retain log entries following it and reply
+		Info("%s drop logs in snapshot at index %d", s, index)
+		s.r.logs = s.r.logs[s.logIndexWithOffset(index):]
+	} else {
+		// 7. Discard the entire log
+		Info("%s drop all logs with a full-covered snapshot at index %d, term %d",
+			s, index, term)
+		s.r.logs = []Log{{Term: term}}
+	}
+
+	s.r.snapshot = snapshot
+	s.r.snapshotIndex = index
+	s.r.persistSnapshot(snapshot)
+	s.UnlockLog()
+
+	// 8. Reset state machine using snapshot contents (and load snapshot’s cluster configuration)
+	Info("%s apply snapshot at index %d, term %d", s, index, term)
+	s.r.applyCh <- ApplyMsg{
+		CommandValid:  false,
+		SnapshotValid: true,
+		Snapshot:      snapshot,
+		SnapshotTerm:  term,
+		SnapshotIndex: index,
+	}
+	return true
+}
+
 func (s *BaseState) RequestVote(args *RequestVoteArgs) (granted bool) {
 	panic("RequestVote not implemented")
 }

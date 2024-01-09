@@ -53,6 +53,10 @@ func (s *CandidateState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	return true
 }
 
+func (s *CandidateState) InstallSnapshot(args *InstallSnapshotArgs) (success bool) {
+	return false
+}
+
 func (s *CandidateState) Close(msg string, args ...interface{}) bool {
 	if !s.closed.CompareAndSwap(false, true) {
 		return false

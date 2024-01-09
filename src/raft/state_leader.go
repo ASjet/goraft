@@ -69,6 +69,12 @@ func (s *LeaderState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	return false
 }
 
+func (s *LeaderState) InstallSnapshot(args *InstallSnapshotArgs) (success bool) {
+	// If this happened, it means there are multiple leaders in the same term
+	Fatal("%s multiple leaders at same term: %d and %d", s, s.Me(), args.Leader)
+	return false
+}
+
 func (s *LeaderState) AppendCommand(command interface{}) (index int, term int) {
 	term = s.Term()
 	s.LockLog()
