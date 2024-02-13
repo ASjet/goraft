@@ -343,6 +343,82 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	return rf
 }
 
+// This will acquire log lock, use go routine to avoid deadlock
+func (rf *Raft) CommitLog(index int) (advance bool) {
+	rf.LockLog()
+	defer rf.UnlockLog()
+
+	if rf.commitIndex < rf.snapshotIndex {
+		rf.commitIndex = rf.snapshotIndex
+	}
+
+	advance = false
+	for rf.commitIndex < index {
+		if rf.commitIndex >= len(rf.logs)+rf.snapshotIndex-1 {
+			return
+		}
+
+		rf.commitIndex++
+		log := rf.logs[rf.commitIndex]
+
+		advance = true
+		rf.UnlockLog()
+		rf.applyCh <- ApplyMsg{
+			CommandValid: true,
+			Command:      log.Data,
+			CommandIndex: rf.commitIndex,
+		}
+		rf.LockLog()
+	}
+
+	if advance {
+		rf.persistState()
+	}
+	return advance
+}
+
+func (rf *Raft) ApplySnapshot(index int, term models.Term, snapshot []byte) (applied bool) {
+	rf.LockLog()
+
+	// 5. Save snapshot file, discard any existing or partial snapshot with a smaller index
+	if rf.snapshotIndex >= index {
+		// Already applied (an newer) snapshot
+		log.Info("%s reject to apply old snapshot at index %d (current is %d), term %d",
+			rf.state, index, rf.snapshotIndex, term)
+		rf.UnlockLog()
+		return false
+	}
+
+	if rf.state.LastLogIndex() >= index {
+		// 6. If existing log entry has same index and term as snapshot’s last
+		//    included entry, retain log entries following it and reply
+		log.Info("%s drop logs in snapshot at index %d", rf.state, index)
+		rf.logs = rf.logs[rf.state.LogIndexWithOffset(index):]
+	} else {
+		// 7. Discard the entire log
+		log.Info("%s drop all logs with a full-covered snapshot at index %d, term %d",
+			rf.state, index, term)
+		rf.logs = []models.Log{{Term: term}}
+	}
+
+	rf.commitIndex = index
+	rf.snapshot = snapshot
+	rf.snapshotIndex = index
+	rf.persistSnapshot(snapshot)
+	rf.UnlockLog()
+
+	// 8. Reset state machine using snapshot contents (and load snapshot’s cluster configuration)
+	log.Info("%s apply snapshot at index %d, term %d", rf.state, index, term)
+	rf.applyCh <- ApplyMsg{
+		CommandValid:  false,
+		SnapshotValid: true,
+		Snapshot:      snapshot,
+		SnapshotTerm:  term,
+		SnapshotIndex: index,
+	}
+	return true
+}
+
 func (rf *Raft) LockState() {
 	rf.stateMu.Lock()
 }

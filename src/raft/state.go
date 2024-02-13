@@ -6,7 +6,6 @@ import (
 
 	"goraft/src/labrpc"
 	"goraft/src/models"
-	"goraft/src/util/log"
 )
 
 const (
@@ -33,6 +32,7 @@ type State interface {
 	LastLogIndex() int
 	Committed() int
 	GetLog(index int) (int, *models.Log)
+	LogIndexWithOffset(index int) int
 
 	To(state State) (newState State)
 	Close(msg string, args ...interface{}) (success bool)
@@ -228,81 +228,11 @@ func (s *BaseState) DeleteLogSince(index int) (n int) {
 
 // This will acquire log lock, use go routine to avoid deadlock
 func (s *BaseState) CommitLog(index int) (advance bool) {
-	s.LockLog()
-	defer s.UnlockLog()
-
-	if s.r.commitIndex < s.SnapshotIndex() {
-		s.r.commitIndex = s.SnapshotIndex()
-	}
-
-	advance = false
-	for s.r.commitIndex < index {
-		i, lastLog := s.GetLog(s.r.commitIndex + 1)
-		if lastLog == nil {
-			return
-		}
-		s.r.commitIndex++
-		advance = true
-		if i != s.r.commitIndex {
-			log.Fatal("%d commit index %d not match with log offset %d", s.Me(),
-				s.r.commitIndex, s.SnapshotIndex())
-		}
-		s.UnlockLog()
-		s.r.applyCh <- ApplyMsg{
-			CommandValid: true,
-			Command:      lastLog.Data,
-			CommandIndex: i,
-		}
-		s.LockLog()
-	}
-
-	if advance {
-		s.r.persistState()
-	}
-
-	return advance
+	return s.r.CommitLog(index)
 }
 
 func (s *BaseState) ApplySnapshot(index int, term models.Term, snapshot []byte) (applied bool) {
-	s.LockLog()
-
-	// 5. Save snapshot file, discard any existing or partial snapshot with a smaller index
-	if s.SnapshotIndex() >= index {
-		// Already applied (an newer) snapshot
-		log.Info("%s reject to apply old snapshot at index %d (current is %d), term %d",
-			s, index, s.SnapshotIndex(), term)
-		s.UnlockLog()
-		return false
-	}
-
-	if s.LastLogIndex() >= index {
-		// 6. If existing log entry has same index and term as snapshot’s last
-		//    included entry, retain log entries following it and reply
-		log.Info("%s drop logs in snapshot at index %d", s, index)
-		s.r.logs = s.r.logs[s.logIndexWithOffset(index):]
-	} else {
-		// 7. Discard the entire log
-		log.Info("%s drop all logs with a full-covered snapshot at index %d, term %d",
-			s, index, term)
-		s.r.logs = []models.Log{{Term: term}}
-	}
-
-	s.r.snapshot = snapshot
-	s.r.snapshotIndex = index
-	s.r.commitIndex = index
-	s.r.persistSnapshot(snapshot)
-	s.UnlockLog()
-
-	// 8. Reset state machine using snapshot contents (and load snapshot’s cluster configuration)
-	log.Info("%s apply snapshot at index %d, term %d", s, index, term)
-	s.r.applyCh <- ApplyMsg{
-		CommandValid:  false,
-		SnapshotValid: true,
-		Snapshot:      snapshot,
-		SnapshotTerm:  term,
-		SnapshotIndex: index,
-	}
-	return true
+	return s.r.ApplySnapshot(index, term, snapshot)
 }
 
 func (s *BaseState) RequestVote(args *models.RequestVoteArgs) (granted bool) {
@@ -339,4 +269,8 @@ func (s *BaseState) logIndexWithOffset(index int) int {
 	} else {
 		return index - s.SnapshotIndex()
 	}
+}
+
+func (s *BaseState) LogIndexWithOffset(index int) int {
+	return s.logIndexWithOffset(index)
 }
