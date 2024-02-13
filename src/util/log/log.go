@@ -116,7 +116,7 @@ func (l *Logger) Fatal(msg string, args ...interface{}) {
 }
 
 func Call() (name, file string, line int) {
-	pc, f, l, ok := runtime.Caller(2)
+	pc, f, l, ok := runtime.Caller(3)
 	if !ok {
 		panic("get call stack failed")
 	}

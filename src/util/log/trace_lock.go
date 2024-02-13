@@ -6,6 +6,10 @@ import (
 	"time"
 )
 
+var (
+	_ sync.Locker = (*TraceLocker)(nil)
+)
+
 type TraceLocker struct {
 	lockID int64
 	locker sync.Locker
