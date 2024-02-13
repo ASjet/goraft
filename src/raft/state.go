@@ -174,35 +174,35 @@ func (s *BaseState) To(state State) State {
 }
 
 func (s *BaseState) Lock() {
-	s.r.stateMu.Lock()
+	s.r.LockState()
 }
 
 func (s *BaseState) Unlock() {
-	s.r.stateMu.Unlock()
+	s.r.UnlockState()
 }
 
 func (s *BaseState) RLockLog() {
-	s.r.logCond.L.Lock()
+	s.r.RLockLog()
 }
 
 func (s *BaseState) RUnlockLog() {
-	s.r.logCond.L.Unlock()
+	s.r.RUnlockLog()
 }
 
 func (s *BaseState) LockLog() {
-	s.r.logCond.L.Lock()
+	s.r.LockLog()
 }
 
 func (s *BaseState) UnlockLog() {
-	s.r.logCond.L.Unlock()
+	s.r.UnlockLog()
 }
 
 func (s *BaseState) WaitLog() {
-	s.r.logCond.Wait()
+	s.r.WaitLog()
 }
 
 func (s *BaseState) BroadcastLog() {
-	s.r.logCond.Broadcast()
+	s.r.BroadcastLog()
 }
 
 func (s *BaseState) AppendLogs(logs ...models.Log) (index int) {

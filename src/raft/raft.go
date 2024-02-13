@@ -163,7 +163,7 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 
 	if index > lastIndex {
 		log.Info("%s on demand snapshot covered all logs, drop all", rf.state)
-		rf.logs = []models.Log{{rf.state.Term(), nil}}
+		rf.logs = []models.Log{{Term: rf.state.Term(), Data: nil}}
 	} else {
 		log.Info("%s on demand snapshot covered part logs, drop [:%d]", rf.state, actualIndex)
 		rf.logs = rf.logs[actualIndex:]
@@ -330,7 +330,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.peers = peers
 	rf.persister = persister
 	rf.me = me
-	rf.logs = []models.Log{{0, nil}}
+	rf.logs = []models.Log{{Term: 0, Data: nil}}
 	rf.applyCh = applyCh
 	rf.stateMu = log.LockerWithTrace(int64(me), new(sync.Mutex))
 	rf.logCond = sync.NewCond(log.LockerWithTrace(int64(me), new(sync.Mutex)))
@@ -341,4 +341,36 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.readPersist(persister.ReadRaftState())
 
 	return rf
+}
+
+func (rf *Raft) LockState() {
+	rf.stateMu.Lock()
+}
+
+func (rf *Raft) UnlockState() {
+	rf.stateMu.Unlock()
+}
+
+func (rf *Raft) RLockLog() {
+	rf.logCond.L.Lock()
+}
+
+func (rf *Raft) RUnlockLog() {
+	rf.logCond.L.Unlock()
+}
+
+func (rf *Raft) LockLog() {
+	rf.logCond.L.Lock()
+}
+
+func (rf *Raft) UnlockLog() {
+	rf.logCond.L.Unlock()
+}
+
+func (rf *Raft) WaitLog() {
+	rf.logCond.Wait()
+}
+
+func (rf *Raft) BroadcastLog() {
+	rf.logCond.Broadcast()
 }
