@@ -24,6 +24,7 @@ import (
 
 	"goraft/src/labgob"
 	"goraft/src/labrpc"
+	"goraft/src/models"
 	"goraft/src/util/log"
 )
 
@@ -44,21 +45,14 @@ type ApplyMsg struct {
 	// For 2D:
 	SnapshotValid bool
 	Snapshot      []byte
-	SnapshotTerm  Term
+	SnapshotTerm  models.Term
 	SnapshotIndex int
 }
 
-type Term int
-
-type Log struct {
-	Term Term
-	Data interface{}
-}
-
 type persistState struct {
-	Term Term
+	Term models.Term
 	Vote int
-	Logs []Log
+	Logs []models.Log
 }
 
 // A Go object implementing a single Raft peer.
@@ -80,10 +74,10 @@ type Raft struct {
 	stateMu sync.Locker
 	state   State
 
-	logCond       *sync.Cond // Must hold this lock when accessing following fields
-	snapshotIndex int        // The index of the first log entry in logs
-	logs          []Log      // The actually log entries, the first elem is a dummy entry
-	commitIndex   int        // The index of highest log entry known to be committed
+	logCond       *sync.Cond   // Must hold this lock when accessing following fields
+	snapshotIndex int          // The index of the first log entry in logs
+	logs          []models.Log // The actually log entries, the first elem is a dummy entry
+	commitIndex   int          // The index of highest log entry known to be committed
 	snapshot      []byte
 }
 
@@ -141,7 +135,7 @@ func (rf *Raft) readPersist(data []byte) {
 
 // A service wants to switch to snapshot.  Only do so if Raft hasn't
 // have more recent info since it communicate the snapshot on applyCh.
-func (rf *Raft) CondInstallSnapshot(lastIncludedTerm Term, lastIncludedIndex int, snapshot []byte) bool {
+func (rf *Raft) CondInstallSnapshot(lastIncludedTerm models.Term, lastIncludedIndex int, snapshot []byte) bool {
 	// Always return true here
 	return true
 }
@@ -169,7 +163,7 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 
 	if index > lastIndex {
 		log.Info("%s on demand snapshot covered all logs, drop all", rf.state)
-		rf.logs = []Log{{rf.state.Term(), nil}}
+		rf.logs = []models.Log{{rf.state.Term(), nil}}
 	} else {
 		log.Info("%s on demand snapshot covered part logs, drop [:%d]", rf.state, actualIndex)
 		rf.logs = rf.logs[actualIndex:]
@@ -185,7 +179,7 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 }
 
 // example RequestVote RPC handler.
-func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
+func (rf *Raft) RequestVote(args *models.RequestVoteArgs, reply *models.RequestVoteReply) {
 	// Your code here (2A, 2B).
 	log.Debug("%s RPC RequestVote from %d", rf.state, args.Candidate)
 	rf.state.Lock()
@@ -213,7 +207,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	reply.Granted = rf.state.RequestVote(args)
 }
 
-func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+func (rf *Raft) AppendEntries(args *models.AppendEntriesArgs, reply *models.AppendEntriesReply) {
 	log.Debug("%s RPC AppendEntries from %d", rf.state, args.Leader)
 	rf.state.Lock()
 	defer rf.state.Unlock()
@@ -246,7 +240,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.state.UnlockLog()
 }
 
-func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapshotReply) {
+func (rf *Raft) InstallSnapshot(args *models.InstallSnapshotArgs, reply *models.InstallSnapshotReply) {
 	log.Debug("%s RPC InstallSnapshot from %d", rf.state, args.Leader)
 	rf.state.Lock()
 	defer rf.state.Unlock()
@@ -286,7 +280,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 // the leader.
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	index := -1
-	term := Term(-1)
+	term := models.Term(-1)
 	isLeader := false
 
 	// Your code here (2B).
@@ -336,7 +330,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.peers = peers
 	rf.persister = persister
 	rf.me = me
-	rf.logs = []Log{{0, nil}}
+	rf.logs = []models.Log{{0, nil}}
 	rf.applyCh = applyCh
 	rf.stateMu = log.LockerWithTrace(int64(me), new(sync.Mutex))
 	rf.logCond = sync.NewCond(log.LockerWithTrace(int64(me), new(sync.Mutex)))

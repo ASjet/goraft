@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 
 	"goraft/src/labrpc"
+	"goraft/src/models"
 	"goraft/src/util/log"
 )
 
@@ -21,22 +22,22 @@ var (
 )
 
 type State interface {
-	Term() Term
+	Term() models.Term
 	Voted() int
 	Me() int
 	Peers() int
 	Role() string
-	Base(term Term, follow int) *BaseState
+	Base(term models.Term, follow int) *BaseState
 	String() string
 	SnapshotIndex() int
 	LastLogIndex() int
 	Committed() int
-	GetLog(index int) (int, *Log)
+	GetLog(index int) (int, *models.Log)
 
 	To(state State) (newState State)
 	Close(msg string, args ...interface{}) (success bool)
 
-	AppendCommand(command interface{}) (index int, term Term)
+	AppendCommand(command interface{}) (index int, term models.Term)
 
 	Lock()
 	Unlock()
@@ -44,9 +45,9 @@ type State interface {
 	UnlockLog()
 
 	// Call only term == curTerm
-	RequestVote(args *RequestVoteArgs) (granted bool)
-	AppendEntries(args *AppendEntriesArgs) (success bool)
-	InstallSnapshot(args *InstallSnapshotArgs) (success bool)
+	RequestVote(args *models.RequestVoteArgs) (granted bool)
+	AppendEntries(args *models.AppendEntriesArgs) (success bool)
+	InstallSnapshot(args *models.InstallSnapshotArgs) (success bool)
 }
 
 // logPrefix always access the state's immutable fields
@@ -68,7 +69,7 @@ func logPrefix(s State) string {
 // Immutable basic raft states
 type BaseState struct {
 	r      *Raft
-	term   Term
+	term   models.Term
 	follow int
 	closed atomic.Bool
 
@@ -86,7 +87,7 @@ func Base(r *Raft) *BaseState {
 
 // Getters
 
-func (s *BaseState) Base(term Term, follow int) *BaseState {
+func (s *BaseState) Base(term models.Term, follow int) *BaseState {
 	return &BaseState{
 		term:   term,
 		follow: follow,
@@ -94,7 +95,7 @@ func (s *BaseState) Base(term Term, follow int) *BaseState {
 	}
 }
 
-func (s *BaseState) Term() Term {
+func (s *BaseState) Term() models.Term {
 	return s.term
 }
 
@@ -131,7 +132,7 @@ func (s *BaseState) LastLogIndex() int {
 }
 
 // Call with holding LogRWLock
-func (s *BaseState) GetLog(index int) (int, *Log) {
+func (s *BaseState) GetLog(index int) (int, *models.Log) {
 	index = s.logIndexWithOffset(index)
 	if index < 0 || index >= len(s.r.logs) {
 		return s.SnapshotIndex() + index, nil
@@ -139,7 +140,7 @@ func (s *BaseState) GetLog(index int) (int, *Log) {
 	return s.SnapshotIndex() + index, &s.r.logs[index]
 }
 
-func (s *BaseState) GetLogSince(index int) []Log {
+func (s *BaseState) GetLogSince(index int) []models.Log {
 	index = s.logIndexWithOffset(index)
 	if index < 0 || index >= len(s.r.logs) {
 		return nil
@@ -147,7 +148,7 @@ func (s *BaseState) GetLogSince(index int) []Log {
 	return s.r.logs[index:]
 }
 
-func (s *BaseState) FirstLogAtTerm(term Term) (int, *Log) {
+func (s *BaseState) FirstLogAtTerm(term models.Term) (int, *models.Log) {
 	for i := 0; i < len(s.r.logs); i++ {
 		if s.r.logs[i].Term == term {
 			return s.SnapshotIndex() + i, &s.r.logs[i]
@@ -204,7 +205,7 @@ func (s *BaseState) BroadcastLog() {
 	s.r.logCond.Broadcast()
 }
 
-func (s *BaseState) AppendLogs(logs ...Log) (index int) {
+func (s *BaseState) AppendLogs(logs ...models.Log) (index int) {
 	s.r.logs = append(s.r.logs, logs...)
 	if len(logs) > 0 {
 		s.r.persistState()
@@ -262,7 +263,7 @@ func (s *BaseState) CommitLog(index int) (advance bool) {
 	return advance
 }
 
-func (s *BaseState) ApplySnapshot(index int, term Term, snapshot []byte) (applied bool) {
+func (s *BaseState) ApplySnapshot(index int, term models.Term, snapshot []byte) (applied bool) {
 	s.LockLog()
 
 	// 5. Save snapshot file, discard any existing or partial snapshot with a smaller index
@@ -283,7 +284,7 @@ func (s *BaseState) ApplySnapshot(index int, term Term, snapshot []byte) (applie
 		// 7. Discard the entire log
 		log.Info("%s drop all logs with a full-covered snapshot at index %d, term %d",
 			s, index, term)
-		s.r.logs = []Log{{Term: term}}
+		s.r.logs = []models.Log{{Term: term}}
 	}
 
 	s.r.snapshot = snapshot
@@ -304,19 +305,19 @@ func (s *BaseState) ApplySnapshot(index int, term Term, snapshot []byte) (applie
 	return true
 }
 
-func (s *BaseState) RequestVote(args *RequestVoteArgs) (granted bool) {
+func (s *BaseState) RequestVote(args *models.RequestVoteArgs) (granted bool) {
 	panic("RequestVote not implemented")
 }
 
-func (s *BaseState) AppendEntries(args *AppendEntriesArgs) (success bool) {
+func (s *BaseState) AppendEntries(args *models.AppendEntriesArgs) (success bool) {
 	panic("AppendEntries not implemented")
 }
 
-func (s *BaseState) AppendCommand(command interface{}) (index int, term Term) {
+func (s *BaseState) AppendCommand(command interface{}) (index int, term models.Term) {
 	panic("AppendCommand not implemented")
 }
 
-func (s *BaseState) InstallSnapshot(args *InstallSnapshotArgs) (success bool) {
+func (s *BaseState) InstallSnapshot(args *models.InstallSnapshotArgs) (success bool) {
 	panic("InstallSnapshot not implemented")
 }
 

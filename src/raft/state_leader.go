@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"goraft/src/labrpc"
+	"goraft/src/models"
 	"goraft/src/util/log"
 )
 
@@ -59,27 +60,27 @@ func Leader(from *CandidateState) *LeaderState {
 	return ls
 }
 
-func (s *LeaderState) RequestVote(args *RequestVoteArgs) (granted bool) {
+func (s *LeaderState) RequestVote(args *models.RequestVoteArgs) (granted bool) {
 	// A leader always rejects vote request from other candidates in the same term
 	return false
 }
 
-func (s *LeaderState) AppendEntries(args *AppendEntriesArgs) (success bool) {
+func (s *LeaderState) AppendEntries(args *models.AppendEntriesArgs) (success bool) {
 	// If this happened, it means there are multiple leaders in the same term
 	log.Fatal("%s multiple leaders at same term: %d and %d", s, s.Me(), args.Leader)
 	return false
 }
 
-func (s *LeaderState) InstallSnapshot(args *InstallSnapshotArgs) (success bool) {
+func (s *LeaderState) InstallSnapshot(args *models.InstallSnapshotArgs) (success bool) {
 	// If this happened, it means there are multiple leaders in the same term
 	log.Fatal("%s multiple leaders at same term: %d and %d", s, s.Me(), args.Leader)
 	return false
 }
 
-func (s *LeaderState) AppendCommand(command interface{}) (index int, term Term) {
+func (s *LeaderState) AppendCommand(command interface{}) (index int, term models.Term) {
 	term = s.Term()
 	s.LockLog()
-	index = s.AppendLogs(Log{
+	index = s.AppendLogs(models.Log{
 		Term: term,
 		Data: command,
 	})
@@ -111,9 +112,9 @@ func (s *LeaderState) Role() string {
 }
 
 // This should be called concurrently rather than one-by-one
-func (s *LeaderState) callAppendEntries(args *AppendEntriesArgs, peerID int,
-	peerRPC *labrpc.ClientEnd) (reply *AppendEntriesReply, ok bool) {
-	reply = new(AppendEntriesReply)
+func (s *LeaderState) callAppendEntries(args *models.AppendEntriesArgs, peerID int,
+	peerRPC *labrpc.ClientEnd) (reply *models.AppendEntriesReply, ok bool) {
+	reply = new(models.AppendEntriesReply)
 	log.Debug("%s calling peers[%d].AppendEntries(%s)", s, peerID, args)
 	if !peerRPC.Call("Raft.AppendEntries", args, reply) || s.closed.Load() {
 		if !s.closed.Load() {
@@ -137,9 +138,9 @@ func (s *LeaderState) callAppendEntries(args *AppendEntriesArgs, peerID int,
 }
 
 // This should be called concurrently rather than one-by-one
-func (s *LeaderState) callInstallSnapshot(args *InstallSnapshotArgs, peerID int,
-	peerRPC *labrpc.ClientEnd) (reply *InstallSnapshotReply, ok bool) {
-	reply = new(InstallSnapshotReply)
+func (s *LeaderState) callInstallSnapshot(args *models.InstallSnapshotArgs, peerID int,
+	peerRPC *labrpc.ClientEnd) (reply *models.InstallSnapshotReply, ok bool) {
+	reply = new(models.InstallSnapshotReply)
 	log.Debug("%s calling peers[%d].InstallSnapshot(%s)", s, peerID, args)
 	if !peerRPC.Call("Raft.InstallSnapshot", args, reply) || s.closed.Load() {
 		if !s.closed.Load() {
@@ -183,7 +184,7 @@ func (s *LeaderState) sendHeartbeats() {
 func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
 	s.RLockLog()
 	prevIndex, prevLog := s.GetLog(s.Committed())
-	args := &AppendEntriesArgs{
+	args := &models.AppendEntriesArgs{
 		Term:         s.Term(),
 		Leader:       s.Me(),
 		PrevLogIndex: prevIndex,
@@ -258,7 +259,7 @@ func (s *LeaderState) sendEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 		return
 	}
 	prevIndex, prevLog := s.GetLog(nextIndex - 1)
-	args := &AppendEntriesArgs{
+	args := &models.AppendEntriesArgs{
 		Term:         s.Term(),
 		Leader:       s.Me(),
 		PrevLogIndex: prevIndex,
@@ -302,7 +303,7 @@ func (s *LeaderState) sendEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 func (s *LeaderState) sendSnapshot(peerID int, peerRPC *labrpc.ClientEnd) {
 	s.RLockLog()
 	lastLogIndex, lastLog := s.GetLog(s.SnapshotIndex())
-	args := &InstallSnapshotArgs{
+	args := &models.InstallSnapshotArgs{
 		Term:         s.Term(),
 		Leader:       s.Me(),
 		LastLogIndex: lastLogIndex,
@@ -357,7 +358,7 @@ func (s *LeaderState) majorMatch(match []int) int {
 	return matchSlice[len(matchSlice)/2]
 }
 
-func (s *LeaderState) updateNext(peerID, prevIndex, matchIndex int, matchTerm Term) int {
+func (s *LeaderState) updateNext(peerID, prevIndex, matchIndex int, matchTerm models.Term) int {
 	nextIndex := matchIndex + 1
 	oldNext := s.nextIndexes[peerID].Swap(int64(nextIndex))
 	log.Debug("%s update peer %d next index %d => %d", s, peerID, oldNext, nextIndex)

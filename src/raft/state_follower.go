@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"goraft/src/models"
 	"goraft/src/util"
 	"goraft/src/util/log"
 )
@@ -17,7 +18,7 @@ type FollowerState struct {
 	timer *util.Timer
 }
 
-func Follower(term Term, follow int, from State) *FollowerState {
+func Follower(term models.Term, follow int, from State) *FollowerState {
 	// Follower can come from any state
 	fs := &FollowerState{
 		BaseState: from.Base(term, follow),
@@ -35,7 +36,7 @@ func Follower(term Term, follow int, from State) *FollowerState {
 
 // If votedFor is null or candidateId, and candidate’s log is at
 // least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
-func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
+func (s *FollowerState) RequestVote(args *models.RequestVoteArgs) (granted bool) {
 	switch s.Voted() {
 	case NoVote:
 		if !s.validRequestVote(args.LastLogIndex, args.LastLogTerm) {
@@ -57,7 +58,7 @@ func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 	}
 }
 
-func (s *FollowerState) AppendEntries(args *AppendEntriesArgs) (success bool) {
+func (s *FollowerState) AppendEntries(args *models.AppendEntriesArgs) (success bool) {
 	switch s.Voted() {
 	case NoVote:
 		if s.Close("start following %d", args.Leader) {
@@ -78,7 +79,7 @@ func (s *FollowerState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	}
 }
 
-func (s *FollowerState) InstallSnapshot(args *InstallSnapshotArgs) (success bool) {
+func (s *FollowerState) InstallSnapshot(args *models.InstallSnapshotArgs) (success bool) {
 	switch s.Voted() {
 	case NoVote:
 		if s.Close("start following %d", args.Leader) {
@@ -137,7 +138,7 @@ func (s *FollowerState) tryCommit(index int) {
 
 // Reply false if log doesn’t contain an entry at prevLogIndex
 // whose term matches prevLogTerm (§5.3)
-func (s *FollowerState) validRequestVote(lastLogIndex int, lastLogTerm Term) bool {
+func (s *FollowerState) validRequestVote(lastLogIndex int, lastLogTerm models.Term) bool {
 	curLastIndex := len(s.r.logs) - 1
 	if curLastIndex < 0 {
 		// There is no log entry yet, so any entry is valid
@@ -161,7 +162,7 @@ func (s *FollowerState) validRequestVote(lastLogIndex int, lastLogTerm Term) boo
 	return lastLogIndex >= curLastIndex
 }
 
-func (s *FollowerState) handleEntries(leader, prevIndex int, prevTerm Term, entries []Log) bool {
+func (s *FollowerState) handleEntries(leader, prevIndex int, prevTerm models.Term, entries []models.Log) bool {
 	s.LockLog()
 	defer s.UnlockLog()
 

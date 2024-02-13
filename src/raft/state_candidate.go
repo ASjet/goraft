@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"goraft/src/labrpc"
+	"goraft/src/models"
 	"goraft/src/util"
 	"goraft/src/util/log"
 )
@@ -24,7 +25,7 @@ type CandidateState struct {
 	votes   map[int]bool
 }
 
-func Candidate(term Term, from State) *CandidateState {
+func Candidate(term models.Term, from State) *CandidateState {
 	cs := &CandidateState{
 		// A candidate always vote for itself
 		BaseState: from.Base(term, from.Me()),
@@ -41,12 +42,12 @@ func Candidate(term Term, from State) *CandidateState {
 	return cs
 }
 
-func (s *CandidateState) RequestVote(args *RequestVoteArgs) (granted bool) {
+func (s *CandidateState) RequestVote(args *models.RequestVoteArgs) (granted bool) {
 	// A candidate always rejects vote request from other candidates in the same term
 	return false
 }
 
-func (s *CandidateState) AppendEntries(args *AppendEntriesArgs) (success bool) {
+func (s *CandidateState) AppendEntries(args *models.AppendEntriesArgs) (success bool) {
 	// If this RPC is received, it means the leader of this term is already elected
 	if s.Close("peer %d won this election, revert to follower", args.Leader) {
 		s.To(Follower(args.Term, args.Leader, s))
@@ -54,7 +55,7 @@ func (s *CandidateState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	return true
 }
 
-func (s *CandidateState) InstallSnapshot(args *InstallSnapshotArgs) (success bool) {
+func (s *CandidateState) InstallSnapshot(args *models.InstallSnapshotArgs) (success bool) {
 	return false
 }
 
@@ -91,13 +92,13 @@ func (s *CandidateState) requestVote(peerID int, peerRPC *labrpc.ClientEnd) {
 	lastIndex, lastLog := s.GetLog(-1)
 	s.RUnlockLog()
 
-	args := &RequestVoteArgs{
+	args := &models.RequestVoteArgs{
 		Term:         s.Term(),
 		Candidate:    s.Me(),
 		LastLogIndex: lastIndex,
 		LastLogTerm:  lastLog.Term,
 	}
-	reply := new(RequestVoteReply)
+	reply := new(models.RequestVoteReply)
 	log.Debug("%s calling peers[%d].RequestVote(%s)", s, peerID, args)
 	if !peerRPC.Call("Raft.RequestVote", args, reply) || s.closed.Load() {
 		if !s.closed.Load() {
