@@ -25,6 +25,7 @@ import (
 	"goraft/src/labgob"
 	"goraft/src/labrpc"
 	"goraft/src/models"
+	"goraft/src/raft/state"
 	"goraft/src/util/log"
 )
 
@@ -72,7 +73,7 @@ type Raft struct {
 
 	// Internal mutable states
 	stateMu sync.Locker
-	state   State
+	state   state.State
 
 	logCond       *sync.Cond   // Must hold this lock when accessing following fields
 	snapshotIndex int          // The index of the first log entry in logs
@@ -87,7 +88,7 @@ func (rf *Raft) GetState() (int, bool) {
 	// Your code here (2A).
 	rf.LockState()
 	defer rf.UnlockState()
-	return int(rf.state.Term()), rf.state.Role() == RoleLeader
+	return int(rf.state.Term()), rf.state.Role() == state.RoleLeader
 }
 
 func (rf *Raft) dumpState() []byte {
@@ -119,17 +120,17 @@ func (rf *Raft) persistSnapshot(snapshot []byte) {
 // restore previously persisted state.
 func (rf *Raft) readPersist(data []byte) {
 	if data == nil || len(data) < 1 { // bootstrap without any state?
-		rf.state = Follower(0, NoVote, rf)
+		rf.state = state.Follower(0, state.NoVote, rf)
 		return
 	}
 	// Your code here (2C).
 	ps := new(persistState)
 	if err := labgob.NewDecoder(bytes.NewBuffer(data)).Decode(ps); err != nil {
-		rf.state = Follower(0, NoVote, rf)
+		rf.state = state.Follower(0, state.NoVote, rf)
 		return
 	}
 
-	rf.state = Follower(ps.Term, ps.Vote, rf)
+	rf.state = state.Follower(ps.Term, ps.Vote, rf)
 	rf.logs = ps.Logs
 }
 
@@ -200,7 +201,7 @@ func (rf *Raft) RequestVote(args *models.RequestVoteArgs, reply *models.RequestV
 		// We don't valid the log entries here since we won't vote for it
 		if rf.state.Close("receive higher term %d from %d, revert to follower",
 			args.Term, args.Candidate) {
-			rf.state.To(Follower(args.Term, NoVote, rf))
+			rf.state.To(state.Follower(args.Term, state.NoVote, rf))
 		}
 	}
 
@@ -227,7 +228,7 @@ func (rf *Raft) AppendEntries(args *models.AppendEntriesArgs, reply *models.Appe
 		// We don't valid the log entries here since we won't vote for it
 		if rf.state.Close("receive higher term %d from %d, revert to follower",
 			args.Term, args.Leader) {
-			rf.state.To(Follower(args.Term, NoVote, rf))
+			rf.state.To(state.Follower(args.Term, state.NoVote, rf))
 		}
 	}
 
@@ -259,7 +260,7 @@ func (rf *Raft) InstallSnapshot(args *models.InstallSnapshotArgs, reply *models.
 		// We don't valid the log entries here since we won't vote for it
 		if rf.state.Close("receive higher term %d from %d, revert to follower",
 			args.Term, args.Leader) {
-			rf.state.To(Follower(args.Term, NoVote, rf))
+			rf.state.To(state.Follower(args.Term, state.NoVote, rf))
 		}
 	}
 
@@ -287,7 +288,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.LockState()
 	defer rf.UnlockState()
 
-	if isLeader = rf.state.Role() == RoleLeader; isLeader {
+	if isLeader = rf.state.Role() == state.RoleLeader; isLeader {
 		index, term = rf.state.AppendCommand(command)
 	}
 
@@ -372,7 +373,7 @@ func (rf *Raft) CommitLog(index int) (advance bool) {
 	}
 
 	if advance {
-		rf.persistState()
+		rf.Persist()
 	}
 	return advance
 }
@@ -401,10 +402,9 @@ func (rf *Raft) ApplySnapshot(index int, term models.Term, snapshot []byte) (app
 		rf.logs = []models.Log{{Term: term}}
 	}
 
-	rf.commitIndex = index
-	rf.snapshot = snapshot
-	rf.snapshotIndex = index
-	rf.persistSnapshot(snapshot)
+	rf.SetCommitIndex(index)
+	rf.SetSnapshot(snapshot, index)
+	rf.PersistWithSnapshot(snapshot)
 	rf.UnlockLog()
 
 	// 8. Reset state machine using snapshot contents (and load snapshot’s cluster configuration)
@@ -429,7 +429,7 @@ func (rf *Raft) Peers() []*labrpc.ClientEnd {
 	return rf.peers
 }
 
-func (rf *Raft) SetState(state State) {
+func (rf *Raft) SetState(state state.State) {
 	rf.state = state
 }
 

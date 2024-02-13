@@ -1,4 +1,4 @@
-package raft
+package state
 
 import (
 	"fmt"
