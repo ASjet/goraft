@@ -44,17 +44,19 @@ type ApplyMsg struct {
 	// For 2D:
 	SnapshotValid bool
 	Snapshot      []byte
-	SnapshotTerm  int
+	SnapshotTerm  Term
 	SnapshotIndex int
 }
 
+type Term int
+
 type Log struct {
-	Term int
+	Term Term
 	Data interface{}
 }
 
 type persistState struct {
-	Term int
+	Term Term
 	Vote int
 	Logs []Log
 }
@@ -91,7 +93,7 @@ func (rf *Raft) GetState() (int, bool) {
 	// Your code here (2A).
 	rf.state.Lock()
 	defer rf.state.Unlock()
-	return rf.state.Term(), rf.state.Role() == RoleLeader
+	return int(rf.state.Term()), rf.state.Role() == RoleLeader
 }
 
 func (rf *Raft) dumpState() []byte {
@@ -139,7 +141,7 @@ func (rf *Raft) readPersist(data []byte) {
 
 // A service wants to switch to snapshot.  Only do so if Raft hasn't
 // have more recent info since it communicate the snapshot on applyCh.
-func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int, snapshot []byte) bool {
+func (rf *Raft) CondInstallSnapshot(lastIncludedTerm Term, lastIncludedIndex int, snapshot []byte) bool {
 	// Always return true here
 	return true
 }
@@ -284,7 +286,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 // the leader.
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	index := -1
-	term := -1
+	term := Term(-1)
 	isLeader := false
 
 	// Your code here (2B).
@@ -295,7 +297,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		index, term = rf.state.AppendCommand(command)
 	}
 
-	return index, term, isLeader
+	return index, int(term), isLeader
 }
 
 // the tester doesn't halt goroutines created by Raft after each test,

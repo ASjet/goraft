@@ -76,7 +76,7 @@ func (s *LeaderState) InstallSnapshot(args *InstallSnapshotArgs) (success bool) 
 	return false
 }
 
-func (s *LeaderState) AppendCommand(command interface{}) (index int, term int) {
+func (s *LeaderState) AppendCommand(command interface{}) (index int, term Term) {
 	term = s.Term()
 	s.LockLog()
 	index = s.AppendLogs(Log{
@@ -357,7 +357,7 @@ func (s *LeaderState) majorMatch(match []int) int {
 	return matchSlice[len(matchSlice)/2]
 }
 
-func (s *LeaderState) updateNext(peerID, prevIndex, matchIndex, matchTerm int) int {
+func (s *LeaderState) updateNext(peerID, prevIndex, matchIndex int, matchTerm Term) int {
 	nextIndex := matchIndex + 1
 	oldNext := s.nextIndexes[peerID].Swap(int64(nextIndex))
 	log.Debug("%s update peer %d next index %d => %d", s, peerID, oldNext, nextIndex)

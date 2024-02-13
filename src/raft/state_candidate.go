@@ -24,7 +24,7 @@ type CandidateState struct {
 	votes   map[int]bool
 }
 
-func Candidate(term int, from State) *CandidateState {
+func Candidate(term Term, from State) *CandidateState {
 	cs := &CandidateState{
 		// A candidate always vote for itself
 		BaseState: from.Base(term, from.Me()),

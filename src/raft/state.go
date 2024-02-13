@@ -21,12 +21,12 @@ var (
 )
 
 type State interface {
-	Term() int
+	Term() Term
 	Voted() int
 	Me() int
 	Peers() int
 	Role() string
-	Base(term, follow int) *BaseState
+	Base(term Term, follow int) *BaseState
 	String() string
 	SnapshotIndex() int
 	LastLogIndex() int
@@ -36,7 +36,7 @@ type State interface {
 	To(state State) (newState State)
 	Close(msg string, args ...interface{}) (success bool)
 
-	AppendCommand(command interface{}) (index int, term int)
+	AppendCommand(command interface{}) (index int, term Term)
 
 	Lock()
 	Unlock()
@@ -68,7 +68,7 @@ func logPrefix(s State) string {
 // Immutable basic raft states
 type BaseState struct {
 	r      *Raft
-	term   int
+	term   Term
 	follow int
 	closed atomic.Bool
 
@@ -86,7 +86,7 @@ func Base(r *Raft) *BaseState {
 
 // Getters
 
-func (s *BaseState) Base(term, follow int) *BaseState {
+func (s *BaseState) Base(term Term, follow int) *BaseState {
 	return &BaseState{
 		term:   term,
 		follow: follow,
@@ -94,7 +94,7 @@ func (s *BaseState) Base(term, follow int) *BaseState {
 	}
 }
 
-func (s *BaseState) Term() int {
+func (s *BaseState) Term() Term {
 	return s.term
 }
 
@@ -147,7 +147,7 @@ func (s *BaseState) GetLogSince(index int) []Log {
 	return s.r.logs[index:]
 }
 
-func (s *BaseState) FirstLogAtTerm(term int) (int, *Log) {
+func (s *BaseState) FirstLogAtTerm(term Term) (int, *Log) {
 	for i := 0; i < len(s.r.logs); i++ {
 		if s.r.logs[i].Term == term {
 			return s.SnapshotIndex() + i, &s.r.logs[i]
@@ -262,7 +262,7 @@ func (s *BaseState) CommitLog(index int) (advance bool) {
 	return advance
 }
 
-func (s *BaseState) ApplySnapshot(index, term int, snapshot []byte) (applied bool) {
+func (s *BaseState) ApplySnapshot(index int, term Term, snapshot []byte) (applied bool) {
 	s.LockLog()
 
 	// 5. Save snapshot file, discard any existing or partial snapshot with a smaller index
@@ -312,7 +312,7 @@ func (s *BaseState) AppendEntries(args *AppendEntriesArgs) (success bool) {
 	panic("AppendEntries not implemented")
 }
 
-func (s *BaseState) AppendCommand(command interface{}) (index int, term int) {
+func (s *BaseState) AppendCommand(command interface{}) (index int, term Term) {
 	panic("AppendCommand not implemented")
 }
 

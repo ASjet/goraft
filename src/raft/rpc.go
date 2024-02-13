@@ -6,10 +6,10 @@ import "fmt"
 // field names must start with capital letters!
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
-	Term         int
+	Term         Term
 	Candidate    int
 	LastLogIndex int
-	LastLogTerm  int
+	LastLogTerm  Term
 }
 
 func (s *RequestVoteArgs) String() string {
@@ -21,7 +21,7 @@ func (s *RequestVoteArgs) String() string {
 // field names must start with capital letters!
 type RequestVoteReply struct {
 	// Your data here (2A).
-	Term    int
+	Term    Term
 	Granted bool
 }
 
@@ -30,10 +30,10 @@ func (s *RequestVoteReply) String() string {
 }
 
 type AppendEntriesArgs struct {
-	Term         int
+	Term         Term
 	Leader       int
 	PrevLogIndex int
-	PrevLogTerm  int
+	PrevLogTerm  Term
 	Entries      []Log
 	LeaderCommit int
 }
@@ -47,10 +47,10 @@ func (s *AppendEntriesArgs) String() string {
 }
 
 type AppendEntriesReply struct {
-	Term         int
+	Term         Term
 	Success      bool
 	LastLogIndex int
-	LastLogTerm  int
+	LastLogTerm  Term
 }
 
 func (s *AppendEntriesReply) String() string {
@@ -59,10 +59,10 @@ func (s *AppendEntriesReply) String() string {
 }
 
 type InstallSnapshotArgs struct {
-	Term         int
+	Term         Term
 	Leader       int
 	LastLogIndex int
-	LastLogTerm  int
+	LastLogTerm  Term
 	Snapshot     []byte
 }
 
@@ -71,7 +71,7 @@ func (s *InstallSnapshotArgs) String() string {
 }
 
 type InstallSnapshotReply struct {
-	Term int
+	Term Term
 }
 
 func (s *InstallSnapshotReply) String() string {

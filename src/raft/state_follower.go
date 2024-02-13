@@ -17,7 +17,7 @@ type FollowerState struct {
 	timer *util.Timer
 }
 
-func Follower(term, follow int, from State) *FollowerState {
+func Follower(term Term, follow int, from State) *FollowerState {
 	// Follower can come from any state
 	fs := &FollowerState{
 		BaseState: from.Base(term, follow),
@@ -137,7 +137,7 @@ func (s *FollowerState) tryCommit(index int) {
 
 // Reply false if log doesn’t contain an entry at prevLogIndex
 // whose term matches prevLogTerm (§5.3)
-func (s *FollowerState) validRequestVote(lastLogIndex, lastLogTerm int) bool {
+func (s *FollowerState) validRequestVote(lastLogIndex int, lastLogTerm Term) bool {
 	curLastIndex := len(s.r.logs) - 1
 	if curLastIndex < 0 {
 		// There is no log entry yet, so any entry is valid
@@ -161,7 +161,7 @@ func (s *FollowerState) validRequestVote(lastLogIndex, lastLogTerm int) bool {
 	return lastLogIndex >= curLastIndex
 }
 
-func (s *FollowerState) handleEntries(leader, prevIndex, prevTerm int, entries []Log) bool {
+func (s *FollowerState) handleEntries(leader, prevIndex int, prevTerm Term, entries []Log) bool {
 	s.LockLog()
 	defer s.UnlockLog()
 
