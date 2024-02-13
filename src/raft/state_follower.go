@@ -15,13 +15,15 @@ var (
 
 type FollowerState struct {
 	*BaseState
+	voted int
 	timer *util.Timer
 }
 
-func Follower(term models.Term, follow int, from State) *FollowerState {
+func Follower(term models.Term, follow int, ctx Context) *FollowerState {
 	// Follower can come from any state
 	fs := &FollowerState{
-		BaseState: from.Base(term, follow),
+		BaseState: Base(ctx, term),
+		voted:     follow,
 	}
 	if follow == NoVote {
 		log.Info("%s new follower without leader", fs)
@@ -34,6 +36,33 @@ func Follower(term models.Term, follow int, from State) *FollowerState {
 	return fs
 }
 
+func (s *FollowerState) Role() string {
+	return RoleFollower
+}
+
+func (s *FollowerState) String() string {
+	return logPrefix(s)
+}
+
+func (s *FollowerState) Voted() int {
+	return s.voted
+}
+
+func (s *FollowerState) Close(msg string, args ...interface{}) bool {
+	if !s.closed.CompareAndSwap(false, true) {
+		return false
+	}
+	log.Info("%s closing: %s", s, fmt.Sprintf(msg, args...))
+	s.timer.Stop()
+	log.Info("%s closed", s)
+	return true
+}
+
+func (s *FollowerState) AppendCommand(command interface{}) (index int, term models.Term) {
+	log.Fatal("%s AppendCommand: not a leader", s)
+	return 0, 0
+}
+
 // If votedFor is null or candidateId, and candidate’s log is at
 // least as up-to-date as receiver’s log, grant vote (§5.2, §5.4)
 func (s *FollowerState) RequestVote(args *models.RequestVoteArgs) (granted bool) {
@@ -44,9 +73,7 @@ func (s *FollowerState) RequestVote(args *models.RequestVoteArgs) (granted bool)
 				s, args.Candidate)
 			return false
 		}
-		if s.Close("start following %d", args.Candidate) {
-			s.To(Follower(args.Term, args.Candidate, s))
-		}
+		s.follow(args.Candidate)
 		return true
 	case args.Candidate:
 		s.timer.Restart()
@@ -61,11 +88,8 @@ func (s *FollowerState) RequestVote(args *models.RequestVoteArgs) (granted bool)
 func (s *FollowerState) AppendEntries(args *models.AppendEntriesArgs) (success bool) {
 	switch s.Voted() {
 	case NoVote:
-		if s.Close("start following %d", args.Leader) {
-			ns := s.To(Follower(args.Term, args.Leader, s))
-			return ns.AppendEntries(args)
-		}
-		return false
+		s.follow(args.Leader)
+		return s.AppendEntries(args)
 	case args.Leader:
 		s.timer.Restart()
 		// If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
@@ -82,35 +106,14 @@ func (s *FollowerState) AppendEntries(args *models.AppendEntriesArgs) (success b
 func (s *FollowerState) InstallSnapshot(args *models.InstallSnapshotArgs) (success bool) {
 	switch s.Voted() {
 	case NoVote:
-		if s.Close("start following %d", args.Leader) {
-			ns := s.To(Follower(args.Term, args.Leader, s))
-			return ns.InstallSnapshot(args)
-		}
-		return false
+		s.follow(args.Leader)
+		return s.InstallSnapshot(args)
 	case args.Leader:
 		s.timer.Restart()
-		return s.ApplySnapshot(args.LastLogIndex, args.LastLogTerm, args.Snapshot)
+		return s.Context().ApplySnapshot(args.LastLogIndex, args.LastLogTerm, args.Snapshot)
 	default:
 		return false
 	}
-}
-
-func (s *FollowerState) Close(msg string, args ...interface{}) bool {
-	if !s.closed.CompareAndSwap(false, true) {
-		return false
-	}
-	log.Info("%s closing: %s", s, fmt.Sprintf(msg, args...))
-	s.timer.Stop()
-	log.Info("%s closed", s)
-	return true
-}
-
-func (s *FollowerState) String() string {
-	return logPrefix(s)
-}
-
-func (s *FollowerState) Role() string {
-	return RoleFollower
 }
 
 func (s *FollowerState) heartbeatTimeout() {
@@ -130,7 +133,7 @@ func (s *FollowerState) tryCommit(index int) {
 	if index > commitIndex {
 		log.Info("%s receive higher commit index %d(current %d)",
 			s, index, commitIndex)
-		if s.CommitLog(index) {
+		if s.Context().CommitLog(index) {
 			log.Info("%s log[:%d] committed", s, s.Committed()+1)
 		}
 	}
@@ -139,12 +142,11 @@ func (s *FollowerState) tryCommit(index int) {
 // Reply false if log doesn’t contain an entry at prevLogIndex
 // whose term matches prevLogTerm (§5.3)
 func (s *FollowerState) validRequestVote(lastLogIndex int, lastLogTerm models.Term) bool {
-	curLastIndex := len(s.r.logs) - 1
-	if curLastIndex < 0 {
-		// There is no log entry yet, so any entry is valid
+	lastIndex, lastLog := s.GetLog(-1)
+	if lastLog == nil {
 		return true
 	}
-	curLastTerm := s.r.logs[curLastIndex].Term
+	curLastTerm := lastLog.Term
 
 	// From 5.4.1:
 	// If the logs have last entries with different terms, then
@@ -159,7 +161,7 @@ func (s *FollowerState) validRequestVote(lastLogIndex int, lastLogTerm models.Te
 	// From 5.4.1:
 	// If the logs end with the same term, then
 	// whichever log is longer is more up-to-date.
-	return lastLogIndex >= curLastIndex
+	return lastLogIndex >= lastIndex
 }
 
 func (s *FollowerState) handleEntries(leader, prevIndex int, prevTerm models.Term, entries []models.Log) bool {
@@ -201,4 +203,9 @@ func (s *FollowerState) handleEntries(leader, prevIndex int, prevTerm models.Ter
 	}
 
 	return true
+}
+
+func (s *FollowerState) follow(peer int) {
+	log.Info("%s starting following %d", s, peer)
+	s.voted = peer
 }

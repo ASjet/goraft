@@ -85,8 +85,8 @@ type Raft struct {
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
 	// Your code here (2A).
-	rf.state.Lock()
-	defer rf.state.Unlock()
+	rf.LockState()
+	defer rf.UnlockState()
 	return int(rf.state.Term()), rf.state.Role() == RoleLeader
 }
 
@@ -119,17 +119,17 @@ func (rf *Raft) persistSnapshot(snapshot []byte) {
 // restore previously persisted state.
 func (rf *Raft) readPersist(data []byte) {
 	if data == nil || len(data) < 1 { // bootstrap without any state?
-		rf.state = Follower(0, NoVote, Base(rf))
+		rf.state = Follower(0, NoVote, rf)
 		return
 	}
 	// Your code here (2C).
 	ps := new(persistState)
 	if err := labgob.NewDecoder(bytes.NewBuffer(data)).Decode(ps); err != nil {
-		rf.state = Follower(0, NoVote, Base(rf))
+		rf.state = Follower(0, NoVote, rf)
 		return
 	}
 
-	rf.state = Follower(ps.Term, ps.Vote, Base(rf))
+	rf.state = Follower(ps.Term, ps.Vote, rf)
 	rf.logs = ps.Logs
 }
 
@@ -149,8 +149,8 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	defer log.Debug("%s made on demand snapshot at index %d successfully", rf.state, index)
 	// Your code here (2D).
 	// NOTE: no need to hold rf.state.Lock() and will cause deadlock
-	rf.state.LockLog()
-	defer rf.state.UnlockLog()
+	rf.LockLog()
+	defer rf.UnlockLog()
 
 	actualIndex := index - rf.snapshotIndex
 	if actualIndex <= 0 {
@@ -182,8 +182,8 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 func (rf *Raft) RequestVote(args *models.RequestVoteArgs, reply *models.RequestVoteReply) {
 	// Your code here (2A, 2B).
 	log.Debug("%s RPC RequestVote from %d", rf.state, args.Candidate)
-	rf.state.Lock()
-	defer rf.state.Unlock()
+	rf.LockState()
+	defer rf.UnlockState()
 	defer log.Debug("%s RPC RequestVote returned to %d", rf.state, args.Candidate)
 
 	reply.Term = rf.state.Term()
@@ -200,7 +200,7 @@ func (rf *Raft) RequestVote(args *models.RequestVoteArgs, reply *models.RequestV
 		// We don't valid the log entries here since we won't vote for it
 		if rf.state.Close("receive higher term %d from %d, revert to follower",
 			args.Term, args.Candidate) {
-			rf.state.To(Follower(args.Term, NoVote, rf.state))
+			rf.state.To(Follower(args.Term, NoVote, rf))
 		}
 	}
 
@@ -209,8 +209,8 @@ func (rf *Raft) RequestVote(args *models.RequestVoteArgs, reply *models.RequestV
 
 func (rf *Raft) AppendEntries(args *models.AppendEntriesArgs, reply *models.AppendEntriesReply) {
 	log.Debug("%s RPC AppendEntries from %d", rf.state, args.Leader)
-	rf.state.Lock()
-	defer rf.state.Unlock()
+	rf.LockState()
+	defer rf.UnlockState()
 	defer log.Debug("%s RPC AppendEntries returned to %d", rf.state, args.Leader)
 
 	reply.Term = rf.state.Term()
@@ -227,23 +227,23 @@ func (rf *Raft) AppendEntries(args *models.AppendEntriesArgs, reply *models.Appe
 		// We don't valid the log entries here since we won't vote for it
 		if rf.state.Close("receive higher term %d from %d, revert to follower",
 			args.Term, args.Leader) {
-			rf.state.To(Follower(args.Term, NoVote, rf.state))
+			rf.state.To(Follower(args.Term, NoVote, rf))
 		}
 	}
 
 	reply.Success = rf.state.AppendEntries(args)
-	rf.state.LockLog()
+	rf.LockLog()
 	index, log := rf.state.GetLog(-1)
 	if log != nil {
 		reply.LastLogIndex, reply.LastLogTerm = index, log.Term
 	}
-	rf.state.UnlockLog()
+	rf.UnlockLog()
 }
 
 func (rf *Raft) InstallSnapshot(args *models.InstallSnapshotArgs, reply *models.InstallSnapshotReply) {
 	log.Debug("%s RPC InstallSnapshot from %d", rf.state, args.Leader)
-	rf.state.Lock()
-	defer rf.state.Unlock()
+	rf.LockState()
+	defer rf.UnlockState()
 	defer log.Debug("%s RPC InstallSnapshot returned to %d", rf.state, args.Leader)
 
 	reply.Term = rf.state.Term()
@@ -259,7 +259,7 @@ func (rf *Raft) InstallSnapshot(args *models.InstallSnapshotArgs, reply *models.
 		// We don't valid the log entries here since we won't vote for it
 		if rf.state.Close("receive higher term %d from %d, revert to follower",
 			args.Term, args.Leader) {
-			rf.state.To(Follower(args.Term, NoVote, rf.state))
+			rf.state.To(Follower(args.Term, NoVote, rf))
 		}
 	}
 
@@ -284,8 +284,8 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader := false
 
 	// Your code here (2B).
-	rf.state.Lock()
-	defer rf.state.Unlock()
+	rf.LockState()
+	defer rf.UnlockState()
 
 	if isLeader = rf.state.Role() == RoleLeader; isLeader {
 		index, term = rf.state.AppendCommand(command)
@@ -306,9 +306,9 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 func (rf *Raft) Kill() {
 	rf.dead.Store(true)
 	// Your code here, if desired.
-	rf.state.Lock()
+	rf.LockState()
 	rf.state.Close("killed")
-	rf.state.Unlock()
+	rf.UnlockState()
 }
 
 func (rf *Raft) killed() bool {
@@ -417,6 +417,66 @@ func (rf *Raft) ApplySnapshot(index int, term models.Term, snapshot []byte) (app
 		SnapshotIndex: index,
 	}
 	return true
+}
+
+// Impl Context
+
+func (rf *Raft) Me() int {
+	return rf.me
+}
+
+func (rf *Raft) Peers() []*labrpc.ClientEnd {
+	return rf.peers
+}
+
+func (rf *Raft) SetState(state State) {
+	rf.state = state
+}
+
+func (rf *Raft) Logs() []models.Log {
+	return rf.logs
+}
+
+func (rf *Raft) CommitIndex() int {
+	return rf.commitIndex
+}
+
+func (rf *Raft) SetCommitIndex(index int) {
+	rf.commitIndex = index
+}
+
+func (rf *Raft) SetLogs(logs []models.Log) {
+	rf.logs = logs
+}
+
+func (rf *Raft) AppendLogs(logs ...models.Log) (lastIndex int) {
+	rf.logs = append(rf.logs, logs...)
+	return len(rf.logs) - 1
+}
+
+func (rf *Raft) GetSnapshot() []byte {
+	return rf.snapshot
+}
+
+func (rf *Raft) SnapshotIndex() int {
+	return rf.snapshotIndex
+}
+
+func (rf *Raft) SetSnapshot(snapshot []byte, index int) {
+	rf.snapshot = snapshot
+	rf.snapshotIndex = index
+}
+
+func (rf *Raft) Persist() {
+	rf.persistState()
+}
+
+func (rf *Raft) PersistWithSnapshot(snapshot []byte) {
+	rf.persistSnapshot(snapshot)
+}
+
+func (rf *Raft) ApplyMsg(msg *ApplyMsg) {
+	rf.applyCh <- *msg
 }
 
 func (rf *Raft) LockState() {

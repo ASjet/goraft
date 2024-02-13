@@ -28,7 +28,7 @@ type CandidateState struct {
 func Candidate(term models.Term, from State) *CandidateState {
 	cs := &CandidateState{
 		// A candidate always vote for itself
-		BaseState: from.Base(term, from.Me()),
+		BaseState: Base(from.Context(), term),
 	}
 	log.Info("%s new candidate", cs)
 
@@ -42,21 +42,16 @@ func Candidate(term models.Term, from State) *CandidateState {
 	return cs
 }
 
-func (s *CandidateState) RequestVote(args *models.RequestVoteArgs) (granted bool) {
-	// A candidate always rejects vote request from other candidates in the same term
-	return false
+func (s *CandidateState) Role() string {
+	return RoleCandidate
 }
 
-func (s *CandidateState) AppendEntries(args *models.AppendEntriesArgs) (success bool) {
-	// If this RPC is received, it means the leader of this term is already elected
-	if s.Close("peer %d won this election, revert to follower", args.Leader) {
-		s.To(Follower(args.Term, args.Leader, s))
-	}
-	return true
+func (s *CandidateState) String() string {
+	return logPrefix(s)
 }
 
-func (s *CandidateState) InstallSnapshot(args *models.InstallSnapshotArgs) (success bool) {
-	return false
+func (s *CandidateState) Voted() int {
+	return s.Me()
 }
 
 func (s *CandidateState) Close(msg string, args ...interface{}) bool {
@@ -70,12 +65,26 @@ func (s *CandidateState) Close(msg string, args ...interface{}) bool {
 	return true
 }
 
-func (s *CandidateState) String() string {
-	return logPrefix(s)
+func (s *CandidateState) AppendCommand(command interface{}) (index int, term models.Term) {
+	log.Fatal("%s AppendCommand: not a leader", s)
+	return 0, 0
 }
 
-func (s *CandidateState) Role() string {
-	return RoleCandidate
+func (s *CandidateState) RequestVote(args *models.RequestVoteArgs) (granted bool) {
+	// A candidate always rejects vote request from other candidates in the same term
+	return false
+}
+
+func (s *CandidateState) AppendEntries(args *models.AppendEntriesArgs) (success bool) {
+	// If this RPC is received, it means the leader of this term is already elected
+	if s.Close("peer %d won this election, revert to follower", args.Leader) {
+		s.To(Follower(args.Term, args.Leader, s.Context()))
+	}
+	return true
+}
+
+func (s *CandidateState) InstallSnapshot(args *models.InstallSnapshotArgs) (success bool) {
+	return false
 }
 
 func (s *CandidateState) electionTimeout() {
@@ -125,7 +134,7 @@ func (s *CandidateState) requestVote(peerID int, peerRPC *labrpc.ClientEnd) {
 	} else {
 		s.Lock()
 		if curTerm := s.Term(); reply.Term > curTerm && s.Close("got higher term %d (current %d), transition to follower", reply.Term, curTerm) {
-			s.To(Follower(reply.Term, NoVote, s))
+			s.To(Follower(reply.Term, NoVote, s.Context()))
 		}
 		s.Unlock()
 	}

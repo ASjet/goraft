@@ -39,7 +39,7 @@ func Leader(from *CandidateState) *LeaderState {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	ls := &LeaderState{
-		BaseState:    from.Base(from.Term(), from.Me()),
+		BaseState:    Base(from.Context(), from.Term()),
 		ctx:          ctx,
 		cancel:       cancel,
 		nextIndexes:  make([]atomic.Int64, from.Peers()),
@@ -60,34 +60,16 @@ func Leader(from *CandidateState) *LeaderState {
 	return ls
 }
 
-func (s *LeaderState) RequestVote(args *models.RequestVoteArgs) (granted bool) {
-	// A leader always rejects vote request from other candidates in the same term
-	return false
+func (s *LeaderState) Role() string {
+	return RoleLeader
 }
 
-func (s *LeaderState) AppendEntries(args *models.AppendEntriesArgs) (success bool) {
-	// If this happened, it means there are multiple leaders in the same term
-	log.Fatal("%s multiple leaders at same term: %d and %d", s, s.Me(), args.Leader)
-	return false
+func (s *LeaderState) String() string {
+	return logPrefix(s)
 }
 
-func (s *LeaderState) InstallSnapshot(args *models.InstallSnapshotArgs) (success bool) {
-	// If this happened, it means there are multiple leaders in the same term
-	log.Fatal("%s multiple leaders at same term: %d and %d", s, s.Me(), args.Leader)
-	return false
-}
-
-func (s *LeaderState) AppendCommand(command interface{}) (index int, term models.Term) {
-	term = s.Term()
-	s.LockLog()
-	index = s.AppendLogs(models.Log{
-		Term: term,
-		Data: command,
-	})
-	s.UnlockLog()
-	log.Info("%s append new command %v to index %d, signal syncing to peers", s, command, index)
-	s.BroadcastLog()
-	return
+func (s *LeaderState) Voted() int {
+	return s.Me()
 }
 
 func (s *LeaderState) Close(msg string, args ...interface{}) bool {
@@ -103,12 +85,34 @@ func (s *LeaderState) Close(msg string, args ...interface{}) bool {
 	return true
 }
 
-func (s *LeaderState) String() string {
-	return logPrefix(s)
+func (s *LeaderState) AppendCommand(command interface{}) (index int, term models.Term) {
+	term = s.Term()
+	s.LockLog()
+	index = s.AppendLogs(models.Log{
+		Term: term,
+		Data: command,
+	})
+	s.UnlockLog()
+	log.Info("%s append new command %v to index %d, signal syncing to peers", s, command, index)
+	s.BroadcastLog()
+	return
 }
 
-func (s *LeaderState) Role() string {
-	return RoleLeader
+func (s *LeaderState) RequestVote(args *models.RequestVoteArgs) (granted bool) {
+	// A leader always rejects vote request from other candidates in the same term
+	return false
+}
+
+func (s *LeaderState) AppendEntries(args *models.AppendEntriesArgs) (success bool) {
+	// If this happened, it means there are multiple leaders in the same term
+	log.Fatal("%s multiple leaders at same term: %d and %d", s, s.Me(), args.Leader)
+	return false
+}
+
+func (s *LeaderState) InstallSnapshot(args *models.InstallSnapshotArgs) (success bool) {
+	// If this happened, it means there are multiple leaders in the same term
+	log.Fatal("%s multiple leaders at same term: %d and %d", s, s.Me(), args.Leader)
+	return false
 }
 
 // This should be called concurrently rather than one-by-one
@@ -129,7 +133,7 @@ func (s *LeaderState) callAppendEntries(args *models.AppendEntriesArgs, peerID i
 		if curTerm := s.Term(); reply.Term > curTerm {
 			ok = false
 			if s.Close("got higher term %d (current %d), revert to follower", reply.Term, curTerm) {
-				s.To(Follower(reply.Term, NoVote, s))
+				s.To(Follower(reply.Term, NoVote, s.Context()))
 			}
 		}
 		s.Unlock()
@@ -154,7 +158,7 @@ func (s *LeaderState) callInstallSnapshot(args *models.InstallSnapshotArgs, peer
 	if curTerm := s.Term(); reply.Term > curTerm {
 		ok = false
 		if s.Close("got higher term %d (current %d), revert to follower", reply.Term, curTerm) {
-			s.To(Follower(reply.Term, NoVote, s))
+			s.To(Follower(reply.Term, NoVote, s.Context()))
 		}
 	}
 	s.Unlock()
@@ -342,7 +346,7 @@ func (s *LeaderState) commitMatch(nPeers int) {
 				continue
 			}
 
-			if s.CommitLog(majorMatch) {
+			if s.Context().CommitLog(majorMatch) {
 				log.Info("%s major match at log[:%d] committed", s, s.Committed())
 			}
 		}
