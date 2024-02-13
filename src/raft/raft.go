@@ -75,7 +75,7 @@ type Raft struct {
 	// state a Raft server must maintain.
 
 	// Internal mutable states
-	stateMu sync.Mutex
+	stateMu sync.Locker
 	state   State
 
 	logCond       *sync.Cond // Must hold this lock when accessing following fields
@@ -336,7 +336,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.me = me
 	rf.logs = []Log{{0, nil}}
 	rf.applyCh = applyCh
-	rf.logCond = sync.NewCond(new(sync.Mutex))
+	rf.stateMu = log.LockerWithTrace(int64(me), new(sync.Mutex))
+	rf.logCond = sync.NewCond(log.LockerWithTrace(int64(me), new(sync.Mutex)))
 
 	// Your initialization code here (2A, 2B, 2C).
 

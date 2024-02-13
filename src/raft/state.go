@@ -3,7 +3,6 @@ package raft
 import (
 	"fmt"
 	"sync/atomic"
-	"time"
 
 	"goraft/src/labrpc"
 	"goraft/src/util/log"
@@ -174,64 +173,30 @@ func (s *BaseState) To(state State) State {
 }
 
 func (s *BaseState) Lock() {
-	traceID := time.Now().UnixNano()
-	if log.BacktraceLock {
-		n, f, l := log.Call()
-		log.Info("[%d]%s:%d: %s Lock(%d)", s.Me(), f, l, n, traceID)
-	}
 	s.r.stateMu.Lock()
-	s.lockTraceID.Store(traceID)
 }
 
 func (s *BaseState) Unlock() {
-	if log.BacktraceLock {
-		n, f, l := log.Call()
-		log.Info("[%d]%s:%d: %s Unlock(%d)", s.Me(), f, l, n, s.lockTraceID.Load())
-	}
 	s.r.stateMu.Unlock()
 }
 
 func (s *BaseState) RLockLog() {
-	traceID := time.Now().UnixNano()
-	if log.BacktraceLock {
-		n, f, l := log.Call()
-		log.Info("[%d]%s:%d: %s RLockLog(%d)", s.Me(), f, l, n, traceID)
-	}
 	s.r.logCond.L.Lock()
-	s.logLockTraceID.Store(traceID)
 }
 
 func (s *BaseState) RUnlockLog() {
-	if log.BacktraceLock {
-		n, f, l := log.Call()
-		log.Info("[%d]%s:%d: %s RUnlockLog(%d)", s.Me(), f, l, n, s.logLockTraceID.Load())
-	}
 	s.r.logCond.L.Unlock()
 }
 
 func (s *BaseState) LockLog() {
-	traceID := time.Now().UnixNano()
-	if log.BacktraceLock {
-		n, f, l := log.Call()
-		log.Info("[%d]%s:%d: %s LockLog(%d)", s.Me(), f, l, n, traceID)
-	}
 	s.r.logCond.L.Lock()
-	s.logLockTraceID.Store(traceID)
 }
 
 func (s *BaseState) UnlockLog() {
-	if log.BacktraceLock {
-		n, f, l := log.Call()
-		log.Info("[%d]%s:%d: %s UnlockLog(%d)", s.Me(), f, l, n, s.logLockTraceID.Load())
-	}
 	s.r.logCond.L.Unlock()
 }
 
 func (s *BaseState) WaitLog() {
-	if log.BacktraceLock {
-		n, f, l := log.Call()
-		log.Info("[%d]%s:%d: %s WaitLog(%d)", s.Me(), f, l, n, s.logLockTraceID.Load())
-	}
 	s.r.logCond.Wait()
 }
 
