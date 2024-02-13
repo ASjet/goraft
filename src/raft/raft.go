@@ -24,6 +24,7 @@ import (
 
 	"goraft/src/labgob"
 	"goraft/src/labrpc"
+	"goraft/src/util/log"
 )
 
 // as each Raft peer becomes aware that successive log entries are
@@ -101,7 +102,7 @@ func (rf *Raft) dumpState() []byte {
 	}
 	buf := new(bytes.Buffer)
 	if err := labgob.NewEncoder(buf).Encode(ps); err != nil {
-		Fatal("Persist state failed: %s", err)
+		log.Fatal("Persist state failed: %s", err)
 	}
 	return buf.Bytes()
 }
@@ -148,8 +149,8 @@ func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int,
 // service no longer needs the log through (and including)
 // that index. Raft should now trim its log as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
-	Debug("%s make on demand snapshot at index %d", rf.state, index)
-	defer Debug("%s made on demand snapshot at index %d successfully", rf.state, index)
+	log.Debug("%s make on demand snapshot at index %d", rf.state, index)
+	defer log.Debug("%s made on demand snapshot at index %d successfully", rf.state, index)
 	// Your code here (2D).
 	// NOTE: no need to hold rf.state.Lock() and will cause deadlock
 	rf.state.LockLog()
@@ -158,17 +159,17 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	actualIndex := index - rf.snapshotIndex
 	if actualIndex <= 0 {
 		// The snapshot is too old
-		Info("%s drop old snapshot at index %d", rf.state, index)
+		log.Info("%s drop old snapshot at index %d", rf.state, index)
 		return
 	}
 
 	lastIndex := rf.state.LastLogIndex()
 
 	if index > lastIndex {
-		Info("%s on demand snapshot covered all logs, drop all", rf.state)
+		log.Info("%s on demand snapshot covered all logs, drop all", rf.state)
 		rf.logs = []Log{{rf.state.Term(), nil}}
 	} else {
-		Info("%s on demand snapshot covered part logs, drop [:%d]", rf.state, actualIndex)
+		log.Info("%s on demand snapshot covered part logs, drop [:%d]", rf.state, actualIndex)
 		rf.logs = rf.logs[actualIndex:]
 	}
 
@@ -177,17 +178,17 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	}
 	rf.snapshot = snapshot
 	rf.snapshotIndex = index
-	Info("%s make on demand snapshot at index %d", rf.state, index)
+	log.Info("%s make on demand snapshot at index %d", rf.state, index)
 	rf.persistSnapshot(snapshot)
 }
 
 // example RequestVote RPC handler.
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
-	Debug("%s RPC RequestVote from %d", rf.state, args.Candidate)
+	log.Debug("%s RPC RequestVote from %d", rf.state, args.Candidate)
 	rf.state.Lock()
 	defer rf.state.Unlock()
-	defer Debug("%s RPC RequestVote returned to %d", rf.state, args.Candidate)
+	defer log.Debug("%s RPC RequestVote returned to %d", rf.state, args.Candidate)
 
 	reply.Term = rf.state.Term()
 
@@ -211,10 +212,10 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	Debug("%s RPC AppendEntries from %d", rf.state, args.Leader)
+	log.Debug("%s RPC AppendEntries from %d", rf.state, args.Leader)
 	rf.state.Lock()
 	defer rf.state.Unlock()
-	defer Debug("%s RPC AppendEntries returned to %d", rf.state, args.Leader)
+	defer log.Debug("%s RPC AppendEntries returned to %d", rf.state, args.Leader)
 
 	reply.Term = rf.state.Term()
 
@@ -244,10 +245,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 }
 
 func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapshotReply) {
-	Debug("%s RPC InstallSnapshot from %d", rf.state, args.Leader)
+	log.Debug("%s RPC InstallSnapshot from %d", rf.state, args.Leader)
 	rf.state.Lock()
 	defer rf.state.Unlock()
-	defer Debug("%s RPC InstallSnapshot returned to %d", rf.state, args.Leader)
+	defer log.Debug("%s RPC InstallSnapshot returned to %d", rf.state, args.Leader)
 
 	reply.Term = rf.state.Term()
 

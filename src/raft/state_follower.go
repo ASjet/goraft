@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"goraft/src/util"
+	"goraft/src/util/log"
 )
 
 var (
@@ -22,9 +23,9 @@ func Follower(term, follow int, from State) *FollowerState {
 		BaseState: from.Base(term, follow),
 	}
 	if follow == NoVote {
-		Info("%s new follower without leader", fs)
+		log.Info("%s new follower without leader", fs)
 	} else {
-		Info("%s new follower with leader %d", fs, follow)
+		log.Info("%s new follower with leader %d", fs, follow)
 	}
 
 	fs.timer = util.NewTimer(context.TODO(), genHeartbeatTimeout(), fs.heartbeatTimeout).Start()
@@ -38,7 +39,7 @@ func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 	switch s.Voted() {
 	case NoVote:
 		if !s.validRequestVote(args.LastLogIndex, args.LastLogTerm) {
-			Info("%s reject vote request from %d: candidate is not more updated",
+			log.Info("%s reject vote request from %d: candidate is not more updated",
 				s, args.Candidate)
 			return false
 		}
@@ -50,7 +51,7 @@ func (s *FollowerState) RequestVote(args *RequestVoteArgs) (granted bool) {
 		s.timer.Restart()
 		return true
 	default:
-		Info("%s reject vote request from %d: already voted other candidate",
+		log.Info("%s reject vote request from %d: already voted other candidate",
 			s, args.Candidate)
 		return false
 	}
@@ -97,9 +98,9 @@ func (s *FollowerState) Close(msg string, args ...interface{}) bool {
 	if !s.closed.CompareAndSwap(false, true) {
 		return false
 	}
-	Info("%s closing: %s", s, fmt.Sprintf(msg, args...))
+	log.Info("%s closing: %s", s, fmt.Sprintf(msg, args...))
 	s.timer.Stop()
-	Info("%s closed", s)
+	log.Info("%s closed", s)
 	return true
 }
 
@@ -114,7 +115,7 @@ func (s *FollowerState) Role() string {
 func (s *FollowerState) heartbeatTimeout() {
 	if s.closed.CompareAndSwap(false, true) {
 		s.Lock()
-		Info("%s heartbeat timeout, transition to candidate", s)
+		log.Info("%s heartbeat timeout, transition to candidate", s)
 		s.To(Candidate(s.Term()+1, s))
 		s.Unlock()
 	}
@@ -126,10 +127,10 @@ func (s *FollowerState) tryCommit(index int) {
 	s.RUnlockLog()
 
 	if index > commitIndex {
-		Info("%s receive higher commit index %d(current %d)",
+		log.Info("%s receive higher commit index %d(current %d)",
 			s, index, commitIndex)
 		if s.CommitLog(index) {
-			Info("%s log[:%d] committed", s, s.Committed()+1)
+			log.Info("%s log[:%d] committed", s, s.Committed()+1)
 		}
 	}
 }
@@ -167,26 +168,26 @@ func (s *FollowerState) handleEntries(leader, prevIndex, prevTerm int, entries [
 	// Reply false if log doesn’t contain an entry at prevLogIndex
 	// whose term matches prevLogTerm (§5.3)
 	if prevIndex > s.LastLogIndex() {
-		Info("%s reject logs: prev index %d is larger than last log index %d",
+		log.Info("%s reject logs: prev index %d is larger than last log index %d",
 			s, prevIndex, s.LastLogIndex())
 		return false
 	}
 
 	_, prevLog := s.GetLog(prevIndex)
 	if prevLog == nil {
-		Info("%s reject logs: prev index %d is already trimmed", s, prevIndex)
+		log.Info("%s reject logs: prev index %d is already trimmed", s, prevIndex)
 		return false
 	}
 
 	// If an existing entry conflicts with a new one (same index but different terms),
 	// delete the existing entry and all that follow it (§5.3)
 	if prevLog.Term != prevTerm {
-		Info("%s reject logs: prev term %d at index %d is conflict with %d", s,
+		log.Info("%s reject logs: prev term %d at index %d is conflict with %d", s,
 			prevTerm, prevIndex, prevLog.Term)
 		// Fallback the whole term once a time
 		termIndex, _ := s.FirstLogAtTerm(prevLog.Term)
 		s.DeleteLogSince(termIndex)
-		Info("%s delete log since index %d", s, termIndex)
+		log.Info("%s delete log since index %d", s, termIndex)
 		return false
 	}
 
@@ -195,7 +196,7 @@ func (s *FollowerState) handleEntries(leader, prevIndex, prevTerm int, entries [
 	if len(entries) > 0 {
 		// Append any new entries not already in the log
 		s.AppendLogs(entries...)
-		Info("%s append new log[%d:%d]", s, prevIndex+1, prevIndex+1+len(entries))
+		log.Info("%s append new log[%d:%d]", s, prevIndex+1, prevIndex+1+len(entries))
 	}
 
 	return true

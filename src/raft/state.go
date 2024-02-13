@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"goraft/src/labrpc"
+	"goraft/src/util/log"
 )
 
 const (
@@ -174,62 +175,62 @@ func (s *BaseState) To(state State) State {
 
 func (s *BaseState) Lock() {
 	traceID := time.Now().UnixNano()
-	if BacktraceLock {
-		n, f, l := Call()
-		Info("[%d]%s:%d: %s Lock(%d)", s.Me(), f, l, n, traceID)
+	if log.BacktraceLock {
+		n, f, l := log.Call()
+		log.Info("[%d]%s:%d: %s Lock(%d)", s.Me(), f, l, n, traceID)
 	}
 	s.r.stateMu.Lock()
 	s.lockTraceID.Store(traceID)
 }
 
 func (s *BaseState) Unlock() {
-	if BacktraceLock {
-		n, f, l := Call()
-		Info("[%d]%s:%d: %s Unlock(%d)", s.Me(), f, l, n, s.lockTraceID.Load())
+	if log.BacktraceLock {
+		n, f, l := log.Call()
+		log.Info("[%d]%s:%d: %s Unlock(%d)", s.Me(), f, l, n, s.lockTraceID.Load())
 	}
 	s.r.stateMu.Unlock()
 }
 
 func (s *BaseState) RLockLog() {
 	traceID := time.Now().UnixNano()
-	if BacktraceLock {
-		n, f, l := Call()
-		Info("[%d]%s:%d: %s RLockLog(%d)", s.Me(), f, l, n, traceID)
+	if log.BacktraceLock {
+		n, f, l := log.Call()
+		log.Info("[%d]%s:%d: %s RLockLog(%d)", s.Me(), f, l, n, traceID)
 	}
 	s.r.logCond.L.Lock()
 	s.logLockTraceID.Store(traceID)
 }
 
 func (s *BaseState) RUnlockLog() {
-	if BacktraceLock {
-		n, f, l := Call()
-		Info("[%d]%s:%d: %s RUnlockLog(%d)", s.Me(), f, l, n, s.logLockTraceID.Load())
+	if log.BacktraceLock {
+		n, f, l := log.Call()
+		log.Info("[%d]%s:%d: %s RUnlockLog(%d)", s.Me(), f, l, n, s.logLockTraceID.Load())
 	}
 	s.r.logCond.L.Unlock()
 }
 
 func (s *BaseState) LockLog() {
 	traceID := time.Now().UnixNano()
-	if BacktraceLock {
-		n, f, l := Call()
-		Info("[%d]%s:%d: %s LockLog(%d)", s.Me(), f, l, n, traceID)
+	if log.BacktraceLock {
+		n, f, l := log.Call()
+		log.Info("[%d]%s:%d: %s LockLog(%d)", s.Me(), f, l, n, traceID)
 	}
 	s.r.logCond.L.Lock()
 	s.logLockTraceID.Store(traceID)
 }
 
 func (s *BaseState) UnlockLog() {
-	if BacktraceLock {
-		n, f, l := Call()
-		Info("[%d]%s:%d: %s UnlockLog(%d)", s.Me(), f, l, n, s.logLockTraceID.Load())
+	if log.BacktraceLock {
+		n, f, l := log.Call()
+		log.Info("[%d]%s:%d: %s UnlockLog(%d)", s.Me(), f, l, n, s.logLockTraceID.Load())
 	}
 	s.r.logCond.L.Unlock()
 }
 
 func (s *BaseState) WaitLog() {
-	if BacktraceLock {
-		n, f, l := Call()
-		Info("[%d]%s:%d: %s WaitLog(%d)", s.Me(), f, l, n, s.logLockTraceID.Load())
+	if log.BacktraceLock {
+		n, f, l := log.Call()
+		log.Info("[%d]%s:%d: %s WaitLog(%d)", s.Me(), f, l, n, s.logLockTraceID.Load())
 	}
 	s.r.logCond.Wait()
 }
@@ -270,20 +271,20 @@ func (s *BaseState) CommitLog(index int) (advance bool) {
 
 	advance = false
 	for s.r.commitIndex < index {
-		i, log := s.GetLog(s.r.commitIndex + 1)
-		if log == nil {
+		i, lastLog := s.GetLog(s.r.commitIndex + 1)
+		if lastLog == nil {
 			return
 		}
 		s.r.commitIndex++
 		advance = true
 		if i != s.r.commitIndex {
-			Fatal("%d commit index %d not match with log offset %d", s.Me(),
+			log.Fatal("%d commit index %d not match with log offset %d", s.Me(),
 				s.r.commitIndex, s.SnapshotIndex())
 		}
 		s.UnlockLog()
 		s.r.applyCh <- ApplyMsg{
 			CommandValid: true,
-			Command:      log.Data,
+			Command:      lastLog.Data,
 			CommandIndex: i,
 		}
 		s.LockLog()
@@ -302,7 +303,7 @@ func (s *BaseState) ApplySnapshot(index, term int, snapshot []byte) (applied boo
 	// 5. Save snapshot file, discard any existing or partial snapshot with a smaller index
 	if s.SnapshotIndex() >= index {
 		// Already applied (an newer) snapshot
-		Info("%s reject to apply old snapshot at index %d (current is %d), term %d",
+		log.Info("%s reject to apply old snapshot at index %d (current is %d), term %d",
 			s, index, s.SnapshotIndex(), term)
 		s.UnlockLog()
 		return false
@@ -311,11 +312,11 @@ func (s *BaseState) ApplySnapshot(index, term int, snapshot []byte) (applied boo
 	if s.LastLogIndex() >= index {
 		// 6. If existing log entry has same index and term as snapshot’s last
 		//    included entry, retain log entries following it and reply
-		Info("%s drop logs in snapshot at index %d", s, index)
+		log.Info("%s drop logs in snapshot at index %d", s, index)
 		s.r.logs = s.r.logs[s.logIndexWithOffset(index):]
 	} else {
 		// 7. Discard the entire log
-		Info("%s drop all logs with a full-covered snapshot at index %d, term %d",
+		log.Info("%s drop all logs with a full-covered snapshot at index %d, term %d",
 			s, index, term)
 		s.r.logs = []Log{{Term: term}}
 	}
@@ -327,7 +328,7 @@ func (s *BaseState) ApplySnapshot(index, term int, snapshot []byte) (applied boo
 	s.UnlockLog()
 
 	// 8. Reset state machine using snapshot contents (and load snapshot’s cluster configuration)
-	Info("%s apply snapshot at index %d, term %d", s, index, term)
+	log.Info("%s apply snapshot at index %d, term %d", s, index, term)
 	s.r.applyCh <- ApplyMsg{
 		CommandValid:  false,
 		SnapshotValid: true,

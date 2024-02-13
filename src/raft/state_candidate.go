@@ -8,6 +8,7 @@ import (
 
 	"goraft/src/labrpc"
 	"goraft/src/util"
+	"goraft/src/util/log"
 )
 
 var (
@@ -28,7 +29,7 @@ func Candidate(term int, from State) *CandidateState {
 		// A candidate always vote for itself
 		BaseState: from.Base(term, from.Me()),
 	}
-	Info("%s new candidate", cs)
+	log.Info("%s new candidate", cs)
 
 	cs.votes = make(map[int]bool, cs.Peers())
 	cs.votes[cs.Me()] = true
@@ -61,10 +62,10 @@ func (s *CandidateState) Close(msg string, args ...interface{}) bool {
 	if !s.closed.CompareAndSwap(false, true) {
 		return false
 	}
-	Info("%s closing: %s", s, fmt.Sprintf(msg, args...))
+	log.Info("%s closing: %s", s, fmt.Sprintf(msg, args...))
 	s.timer.Stop()
 	s.wg.Wait()
-	Info("%s closed", s)
+	log.Info("%s closed", s)
 	return true
 }
 
@@ -79,7 +80,7 @@ func (s *CandidateState) Role() string {
 func (s *CandidateState) electionTimeout() {
 	if s.closed.CompareAndSwap(false, true) {
 		s.Lock()
-		Info("%s election timeout, start another election", s)
+		log.Info("%s election timeout, start another election", s)
 		s.To(Candidate(s.Term()+1, s))
 		s.Unlock()
 	}
@@ -97,14 +98,14 @@ func (s *CandidateState) requestVote(peerID int, peerRPC *labrpc.ClientEnd) {
 		LastLogTerm:  lastLog.Term,
 	}
 	reply := new(RequestVoteReply)
-	Debug("%s calling peers[%d].RequestVote(%s)", s, peerID, args)
+	log.Debug("%s calling peers[%d].RequestVote(%s)", s, peerID, args)
 	if !peerRPC.Call("Raft.RequestVote", args, reply) || s.closed.Load() {
 		if !s.closed.Load() {
-			Error("%s peers[%d].RequestVote(%s) failed", s, peerID, args)
+			log.Error("%s peers[%d].RequestVote(%s) failed", s, peerID, args)
 		}
 		return
 	}
-	Debug("%s peers[%d].RequestVote(%s) => (%s)", s, peerID, args, reply)
+	log.Debug("%s peers[%d].RequestVote(%s) => (%s)", s, peerID, args, reply)
 
 	if reply.Granted {
 		s.votesMu.Lock()
@@ -112,7 +113,7 @@ func (s *CandidateState) requestVote(peerID int, peerRPC *labrpc.ClientEnd) {
 		votes := len(s.votes)
 		s.votesMu.Unlock()
 
-		Info("%s got vote from %d(%d/%d)", s, peerID, votes, s.Peers())
+		log.Info("%s got vote from %d(%d/%d)", s, peerID, votes, s.Peers())
 
 		if votes >= s.Majority() && s.Close("got majority votes(%d/%d), transition to leader", votes, s.Peers()) {
 			// Got majority votes, become leader
@@ -131,10 +132,10 @@ func (s *CandidateState) requestVote(peerID int, peerRPC *labrpc.ClientEnd) {
 
 func (s *CandidateState) startElection() {
 	defer s.wg.Done()
-	defer Info("%s election loop exited", s)
-	Info("%s start election", s)
+	defer log.Info("%s election loop exited", s)
+	log.Info("%s start election", s)
 	for !s.closed.Load() {
-		Info("%s sending vote requests", s)
+		log.Info("%s sending vote requests", s)
 		s.PollPeers(s.requestVote)
 		// We won't wait all peers to respond here
 
@@ -143,7 +144,7 @@ func (s *CandidateState) startElection() {
 		}
 
 		// We will use sleep here to avoid handling cleanup of time.Ticker
-		Info("%s waiting for another round of requests", s)
+		log.Info("%s waiting for another round of requests", s)
 		time.Sleep(RequestVoteInterval)
 	}
 }
