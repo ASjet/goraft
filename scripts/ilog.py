@@ -3,7 +3,7 @@ import sys
 from rich.console import Console, ScreenContext
 from rich.table import Table
 
-from plog import ptn, get_peers, parse_groups, NO_VOTE, FOLLOWER, CANDIDATE, LEADER, SELF_VOTE
+from lib import ptn, get_peers, parse_groups, NO_VOTE, FOLLOWER, CANDIDATE, LEADER, SELF_VOTE
 
 
 class PeerStat:
