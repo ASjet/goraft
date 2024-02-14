@@ -451,7 +451,7 @@ func (rf *Raft) SetLogs(logs []models.Log) {
 
 func (rf *Raft) AppendLogs(logs ...models.Log) (lastIndex int) {
 	rf.logs = append(rf.logs, logs...)
-	return len(rf.logs) - 1
+	return rf.snapshotIndex + len(rf.logs) - 1
 }
 
 func (rf *Raft) GetSnapshot() []byte {
