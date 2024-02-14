@@ -360,7 +360,7 @@ func (rf *Raft) CommitLog(index int) (advance bool) {
 		}
 
 		rf.commitIndex++
-		log := rf.logs[rf.commitIndex]
+		log := rf.logs[rf.commitIndex-rf.snapshotIndex]
 
 		advance = true
 		rf.UnlockLog()
