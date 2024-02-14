@@ -118,10 +118,10 @@ func (s *FollowerState) InstallSnapshot(args *models.InstallSnapshotArgs) (succe
 
 func (s *FollowerState) heartbeatTimeout() {
 	if s.closed.CompareAndSwap(false, true) {
-		s.Lock()
+		s.LockState()
 		log.Info("%s heartbeat timeout, transition to candidate", s)
 		s.To(Candidate(s.Term()+1, s))
-		s.Unlock()
+		s.UnlockState()
 	}
 }
 

@@ -89,10 +89,10 @@ func (s *CandidateState) InstallSnapshot(args *models.InstallSnapshotArgs) (succ
 
 func (s *CandidateState) electionTimeout() {
 	if s.closed.CompareAndSwap(false, true) {
-		s.Lock()
+		s.LockState()
 		log.Info("%s election timeout, start another election", s)
 		s.To(Candidate(s.Term()+1, s))
-		s.Unlock()
+		s.UnlockState()
 	}
 }
 
@@ -127,16 +127,16 @@ func (s *CandidateState) requestVote(peerID int, peerRPC *labrpc.ClientEnd) {
 
 		if votes >= s.Majority() && s.Close("got majority votes(%d/%d), transition to leader", votes, s.Peers()) {
 			// Got majority votes, become leader
-			s.Lock()
+			s.LockState()
 			s.To(Leader(s))
-			s.Unlock()
+			s.UnlockState()
 		}
 	} else {
-		s.Lock()
+		s.LockState()
 		if curTerm := s.Term(); reply.Term > curTerm && s.Close("got higher term %d (current %d), transition to follower", reply.Term, curTerm) {
 			s.To(Follower(reply.Term, NoVote, s.Context()))
 		}
-		s.Unlock()
+		s.UnlockState()
 	}
 }
 

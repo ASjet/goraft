@@ -129,14 +129,14 @@ func (s *LeaderState) callAppendEntries(args *models.AppendEntriesArgs, peerID i
 	log.Debug("%s peers[%d].AppendEntries(%s) => (%s)", s, peerID, args, reply)
 	ok = true
 	if !reply.Success {
-		s.Lock()
+		s.LockState()
 		if curTerm := s.Term(); reply.Term > curTerm {
 			ok = false
 			if s.Close("got higher term %d (current %d), revert to follower", reply.Term, curTerm) {
 				s.To(Follower(reply.Term, NoVote, s.Context()))
 			}
 		}
-		s.Unlock()
+		s.UnlockState()
 	}
 	return reply, ok
 }
@@ -154,14 +154,14 @@ func (s *LeaderState) callInstallSnapshot(args *models.InstallSnapshotArgs, peer
 	}
 	log.Debug("%s peers[%d].InstallSnapshot(%s) => (%s)", s, peerID, args, reply)
 	ok = true
-	s.Lock()
+	s.LockState()
 	if curTerm := s.Term(); reply.Term > curTerm {
 		ok = false
 		if s.Close("got higher term %d (current %d), revert to follower", reply.Term, curTerm) {
 			s.To(Follower(reply.Term, NoVote, s.Context()))
 		}
 	}
-	s.Unlock()
+	s.UnlockState()
 	return reply, ok
 }
 

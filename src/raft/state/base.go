@@ -141,11 +141,11 @@ func (s *BaseState) LogIndexWithOffset(index int) int {
 	}
 }
 
-func (s *BaseState) Lock() {
+func (s *BaseState) LockState() {
 	s.Context().LockState()
 }
 
-func (s *BaseState) Unlock() {
+func (s *BaseState) UnlockState() {
 	s.Context().UnlockState()
 }
 
