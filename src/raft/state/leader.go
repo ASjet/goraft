@@ -188,11 +188,15 @@ func (s *LeaderState) sendHeartbeats() {
 func (s *LeaderState) sendHeartbeat(peerID int, peerRPC *labrpc.ClientEnd) {
 	s.RLockLog()
 	prevIndex, prevLog := s.GetLog(s.Committed())
+	prevTerm := s.Term()
+	if prevLog != nil {
+		prevTerm = prevLog.Term
+	}
 	args := &models.AppendEntriesArgs{
 		Term:         s.Term(),
 		Leader:       s.Me(),
 		PrevLogIndex: prevIndex,
-		PrevLogTerm:  prevLog.Term,
+		PrevLogTerm:  prevTerm,
 		Entries:      nil,
 		LeaderCommit: s.Committed(),
 	}
@@ -255,7 +259,7 @@ func (s *LeaderState) syncPeerEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 func (s *LeaderState) sendEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 	s.RLockLog()
 	nextIndex := int(s.nextIndexes[peerID].Load())
-	if nextIndex < s.SnapshotIndex() {
+	if nextIndex <= s.SnapshotIndex() {
 		s.RUnlockLog()
 		// Send a snapshot instead of entries
 		log.Info("%s peer %d is lagging behind, send snapshot", s, peerID)
@@ -263,6 +267,9 @@ func (s *LeaderState) sendEntries(peerID int, peerRPC *labrpc.ClientEnd) {
 		return
 	}
 	prevIndex, prevLog := s.GetLog(nextIndex - 1)
+	if prevLog == nil {
+		log.Fatal("%s no log at index %d for peer %d", s, nextIndex-1, peerID)
+	}
 	args := &models.AppendEntriesArgs{
 		Term:         s.Term(),
 		Leader:       s.Me(),
