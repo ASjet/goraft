@@ -89,7 +89,7 @@ func (s *FollowerState) AppendEntries(args *models.AppendEntriesArgs) (success b
 	switch s.Voted() {
 	case NoVote:
 		s.follow(args.Leader)
-		return s.AppendEntries(args)
+		fallthrough
 	case args.Leader:
 		s.timer.Restart()
 		// If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
@@ -107,7 +107,7 @@ func (s *FollowerState) InstallSnapshot(args *models.InstallSnapshotArgs) (succe
 	switch s.Voted() {
 	case NoVote:
 		s.follow(args.Leader)
-		return s.InstallSnapshot(args)
+		fallthrough
 	case args.Leader:
 		s.timer.Restart()
 		return s.Context().ApplySnapshot(args.LastLogIndex, args.LastLogTerm, args.Snapshot)
