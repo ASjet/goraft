@@ -2,6 +2,8 @@ package state
 
 import (
 	"fmt"
+	"math/rand"
+	"time"
 
 	"goraft/src/labrpc"
 	"goraft/src/models"
@@ -13,6 +15,13 @@ const (
 	RoleFollower  = "F"
 	RoleCandidate = "C"
 	RoleLeader    = "L"
+
+	HeartBeatInterval     = time.Millisecond * 250
+	RequestVoteInterval   = time.Millisecond * 200
+	ElectionTimeout       = time.Millisecond * 450
+	ElectionTimeoutDelta  = time.Millisecond * 100
+	HeartBeatTimeout      = time.Millisecond * 450
+	HeartBeatTimeoutDelta = time.Millisecond * 100
 )
 
 type Context interface {
@@ -90,5 +99,17 @@ func logPrefix(s State) string {
 	default:
 		return fmt.Sprintf("%d>%d:%s%03d:%02d/%02d/%02d",
 			s.Me(), s.Voted(), s.Role(), s.Term(), s.SnapshotIndex(), s.Committed(), s.LastLogIndex())
+	}
+}
+
+func genElectionTimeout() func() time.Duration {
+	return func() time.Duration {
+		return ElectionTimeout - ElectionTimeoutDelta/2 + time.Duration(rand.Int63n(int64(ElectionTimeoutDelta)))
+	}
+}
+
+func genHeartbeatTimeout() func() time.Duration {
+	return func() time.Duration {
+		return ElectionTimeout - ElectionTimeoutDelta/2 + time.Duration(rand.Int63n(int64(ElectionTimeoutDelta)))
 	}
 }
