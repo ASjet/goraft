@@ -321,7 +321,7 @@ func (s *LeaderState) sendSnapshot(peerID int, peerRPC *labrpc.ClientEnd) {
 	}
 
 	log.Info("%s send snapshot at index %d term %d to perr %d",
-		args.LastLogIndex, args.LastLogTerm, peerID)
+		s, args.LastLogIndex, args.LastLogTerm, peerID)
 	s.callInstallSnapshot(args, peerID, peerRPC)
 }
 
