@@ -51,9 +51,10 @@ type ApplyMsg struct {
 }
 
 type persistState struct {
-	Term models.Term
-	Vote int
-	Logs []models.Log
+	Term          models.Term
+	Vote          int
+	Logs          []models.Log
+	SnapshotIndex int
 }
 
 // A Go object implementing a single Raft peer.
@@ -93,9 +94,10 @@ func (rf *Raft) GetState() (int, bool) {
 
 func (rf *Raft) dumpState() []byte {
 	ps := &persistState{
-		Term: rf.state.Term(),
-		Vote: rf.state.Voted(),
-		Logs: rf.logs,
+		Term:          rf.state.Term(),
+		Vote:          rf.state.Voted(),
+		Logs:          rf.logs,
+		SnapshotIndex: rf.snapshotIndex,
 	}
 	buf := new(bytes.Buffer)
 	if err := labgob.NewEncoder(buf).Encode(ps); err != nil {
@@ -118,7 +120,7 @@ func (rf *Raft) persistSnapshot(snapshot []byte) {
 }
 
 // restore previously persisted state.
-func (rf *Raft) readPersist(data []byte) {
+func (rf *Raft) readPersist(data, snapshot []byte) {
 	if data == nil || len(data) < 1 { // bootstrap without any state?
 		rf.state = state.Follower(0, state.NoVote, rf)
 		return
@@ -130,8 +132,10 @@ func (rf *Raft) readPersist(data []byte) {
 		return
 	}
 
-	rf.state = state.Follower(ps.Term, ps.Vote, rf)
 	rf.logs = ps.Logs
+	rf.snapshotIndex = ps.SnapshotIndex
+	rf.state = state.Follower(ps.Term, ps.Vote, rf)
+	rf.snapshot = snapshot
 }
 
 // A service wants to switch to snapshot.  Only do so if Raft hasn't
@@ -339,7 +343,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// Your initialization code here (2A, 2B, 2C).
 
 	// initialize from state persisted before a crash
-	rf.readPersist(persister.ReadRaftState())
+	rf.readPersist(persister.ReadRaftState(), persister.ReadSnapshot())
 
 	return rf
 }
