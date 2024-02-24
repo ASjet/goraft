@@ -3,8 +3,6 @@ package log
 import (
 	llog "log"
 	"runtime"
-
-	"github.com/sirupsen/logrus"
 )
 
 // Debugging
@@ -26,8 +24,6 @@ const (
 
 func init() {
 	llog.SetFlags(llog.Lmicroseconds)
-	logrus.SetLevel(logrus.DebugLevel)
-	logrus.SetFormatter(logrus.StandardLogger().Formatter)
 }
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
